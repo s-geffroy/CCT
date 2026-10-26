@@ -43,3 +43,15 @@ nav[role=tablist] button[aria-selected=true] { font-weight: bold; text-decoratio
 .history { border-collapse: collapse; width: 100%; }
 .history td, .history th { border-bottom: 1px solid #ddd; padding: .3rem .5rem; text-align: left; }
 .context { color: #555; }
+.analysis { margin-top: 1rem; }
+.table-scroll { overflow-x: auto; }
+.lines { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.lines th, .lines td { border-bottom: 1px solid #ddd; padding: .25rem .5rem; text-align: left; vertical-align: top; }
+.lines tr { cursor: pointer; }
+.lines tr[aria-selected=true] { background: #dbe8ff; }
+.lines .score { white-space: nowrap; font-weight: 600; }
+.lines .pv { color: #333; }
+.stage { margin-right: .6rem; color: #888; }
+.stage.done { color: #1b6e1b; font-weight: 600; }
+.coverage, .legend { font-size: .9em; color: #555; }
+.pv-nav { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; }

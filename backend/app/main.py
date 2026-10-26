@@ -10,10 +10,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.staticfiles import StaticFiles
 
+from .api.analysis import router as analysis_router
 from .api.library import router as library_router
 from .api.routes import router
 from .api.sessions import router as sessions_router
 from .domain.errors import DomainError
+from .engine.scheduler import Scheduler
 from .engine.uci import EngineManager
 from .persistence.db import Database
 from .log import get_logger, setup_logging
@@ -42,9 +44,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             log.error("base indisponible : %s: %s", type(exc).__name__, exc)
         if settings.engine_enabled:
             await app.state.engine.start()
+            await app.state.scheduler.start()
         else:
             log.warning("moteur desactive par configuration")
         yield
+        # SIGTERM : on arrete la file (le calcul en cours est interrompu) puis Stockfish.
+        await app.state.scheduler.stop()
         await app.state.engine.stop()
         log.info("arret")
 
@@ -52,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine = EngineManager(settings)
     app.state.db = Database(settings.data_dir / "app.sqlite")
+    app.state.scheduler = Scheduler(app.state.db, app.state.engine, max_queued=settings.max_queued_jobs)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -87,6 +93,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(router)
     app.include_router(library_router)
     app.include_router(sessions_router)
+    app.include_router(analysis_router)
     _mount_static(app, settings.static_dir)
     return app
 

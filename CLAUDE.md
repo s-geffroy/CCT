@@ -32,6 +32,12 @@ les labels a la main.
   Stockfish proprement dans `stop_grace_period`.
 - Aucune donnee moteur (coup, score, PV, rang) ne sort par l'API ou le SSE
   d'une seance non revelee : le filtrage est cote serveur, et teste.
+  Regle unique (`analysis_repo.is_visible`) : les resultats d'un travail ne
+  sont lisibles que si aucune seance `active`/`submitted` ne porte sur le meme
+  echiquier. Toute nouvelle route d'analyse doit passer par `job_view()` et
+  etre ajoutee au test client hostile (un test echoue sinon).
+- Le planificateur (`engine/scheduler.py`) ne doit jamais s'arreter sur une
+  erreur de travail : il la journalise, marque le travail `failed`, continue.
 
 ## Services Compose
 
@@ -44,6 +50,10 @@ les labels a la main.
 
 `devtools` sert a generer les lockfiles et a lancer typecheck/vitest ; rien ne
 s'execute sur l'hote, meme si `node` ou `python3` y sont presents.
+
+Les conteneurs `appctl run` sont plafonnes (`timeout --signal=KILL` dans les
+CMD des images `test` et `e2e`) : `appctl down` ne les arrete pas, un test bloque
+laisserait sinon un conteneur orphelin. Garder ce plafond.
 
 `e2e` joint l'application par l'alias `cct-web`, jamais `app` : Chromium force
 HTTPS sur ce nom (`.app` est un TLD en liste HSTS preload). Captures et

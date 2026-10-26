@@ -6,6 +6,8 @@ export default defineConfig({
   testDir: './specs',
   outputDir: './results/artifacts',
   timeout: 30_000,
+  // Plafond de la suite entiere : un blocage ne laisse pas de conteneur orphelin.
+  globalTimeout: 20 * 60_000,
   retries: 0,
   workers: 1,
   reporter: [['list'], ['html', { outputFolder: './results/report', open: 'never' }]],

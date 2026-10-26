@@ -39,6 +39,24 @@ async function drag(page: Page, from: string, to: string) {
   await page.waitForTimeout(100); // blocage des clics par dnd-kit apres depot
 }
 
+/**
+ * Hygiene : une execution interrompue peut laisser une seance ouverte sur la
+ * position de depart ; la regle anti-spoiler masquerait alors toute reference
+ * sur cet echiquier (comportement voulu). On abandonne ces restes via l'API.
+ */
+async function abandonOpenSessions(page: Page) {
+  const history = await (await page.request.get('/api/v1/history?limit=200')).json();
+  for (const item of history.items as { id: string; state: string; fen: string }[]) {
+    if (item.state !== 'active' || !item.fen.startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w')) continue;
+    const s = await (await page.request.get(`/api/v1/sessions/${item.id}`)).json();
+    await page.request.post(`/api/v1/sessions/${item.id}/abandon`, { data: { expected_revision: s.revision } });
+  }
+}
+
+test.beforeEach(async ({ page }) => {
+  await abandonOpenSessions(page);
+});
+
 async function retainStart(page: Page) {
   await page.goto('/#/positions');
   await page.getByRole('button', { name: 'Charger' }).click();
@@ -100,7 +118,8 @@ test('mode C : arbre a branches, coup illegal refuse, annuler/retablir, soumissi
 
   await page.getByRole('button', { name: 'Reveler' }).click();
   await expect(page.getByTestId('session-state')).toHaveText('revelee');
-  await expect(page.getByTestId('reference-status')).toContainText('pas encore disponible');
+  // Lot 3 : la reference moteur (preparee pendant la seance) apparait apres revelation.
+  await expect(page.getByRole('region', { name: 'Variantes Stockfish' })).toBeVisible({ timeout: 60_000 });
 });
 
 test('mode B : echiquier fige, variantes jugees seulement au debriefing', async ({ page }) => {

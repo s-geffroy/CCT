@@ -11,4 +11,6 @@ COPY specs ./specs
 # non privilegie qui lance les tests.
 RUN chmod -R a+rX /e2e
 ENV HOME=/tmp/home
-CMD ["npx", "playwright", "test"]
+# Plafond dur au-dela du globalTimeout de Playwright (appctl down ne touche pas
+# aux conteneurs ponctuels).
+CMD ["timeout", "--signal=KILL", "1500", "npx", "playwright", "test"]

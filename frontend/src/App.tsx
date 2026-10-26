@@ -20,6 +20,7 @@ import { VariationTree } from './components/VariationTree';
 import { PositionEditor } from './features/PositionEditor';
 import { RecentPositions } from './features/positions/RecentPositions';
 import { RetainedPanel } from './features/positions/RetainedPanel';
+import { StudyView } from './features/analysis/StudyView';
 import { HistoryView } from './features/training/HistoryView';
 import { TrainingView } from './features/training/TrainingView';
 
@@ -38,7 +39,10 @@ function gameLabel(g: Game): string {
   return `${g.index + 1}. ${players || 'Partie'}${h.Event && h.Event !== '?' ? ` (${h.Event})` : ''}`;
 }
 
-function PositionsModule({ onTrain }: { onTrain: (position: Position, mode: 'mental' | 'tree') => void }) {
+function PositionsModule({ onTrain, onStudy }: {
+  onTrain: (position: Position, mode: 'mental' | 'tree') => void;
+  onStudy: (position: Position) => void;
+}) {
   const [tab, setTab] = useState<Tab>('fen');
   const [error, setError] = useState<string | null>(null);
 
@@ -232,7 +236,7 @@ function PositionsModule({ onTrain }: { onTrain: (position: Position, mode: 'men
       )}
 
       <div className="library">
-        <RetainedPanel position={retained} displayedFen={displayedFen} onShow={() => setTab('retained')} onTrain={onTrain} />
+        <RetainedPanel position={retained} displayedFen={displayedFen} onShow={() => setTab('retained')} onTrain={onTrain} onStudy={onStudy} />
         <RecentPositions
           positions={recent}
           selectedId={retained?.id ?? null}
@@ -246,11 +250,13 @@ function PositionsModule({ onTrain }: { onTrain: (position: Position, mode: 'men
   );
 }
 
-type Route = { view: 'positions' } | { view: 'history' } | { view: 'session'; id: string };
+type Route = { view: 'positions' } | { view: 'history' } | { view: 'session'; id: string } | { view: 'study'; id: string };
 
 function parseRoute(hash: string): Route {
   const m = /^#\/session\/([0-9a-f-]{36})$/.exec(hash);
   if (m) return { view: 'session', id: m[1] };
+  const study = /^#\/study\/([0-9a-f-]{36})$/.exec(hash);
+  if (study) return { view: 'study', id: study[1] };
   if (hash === '#/history') return { view: 'history' };
   return { view: 'positions' };
 }
@@ -291,13 +297,15 @@ export function App() {
         <nav aria-label="Modules" className="modules">
           <a href="#/positions" aria-current={route.view === 'positions' ? 'page' : undefined}>Positions</a>
           {route.view === 'session' && <a href={`#/session/${route.id}`} aria-current="page">Seance</a>}
+          {route.view === 'study' && <a href={`#/study/${route.id}`} aria-current="page">Etude</a>}
           <a href="#/history" aria-current={route.view === 'history' ? 'page' : undefined}>Historique</a>
         </nav>
       </header>
       {error && <p role="alert" className="error">{error}</p>}
-      {route.view === 'positions' && <PositionsModule onTrain={train} />}
+      {route.view === 'positions' && <PositionsModule onTrain={train} onStudy={(p) => go(`#/study/${p.id}`)} />}
       {route.view === 'history' && <HistoryView onOpen={(id) => go(`#/session/${id}`)} />}
       {route.view === 'session' && <TrainingView key={route.id} sessionId={route.id} onExit={() => go('#/positions')} />}
+      {route.view === 'study' && <StudyView key={route.id} positionId={route.id} />}
     </main>
   );
 }

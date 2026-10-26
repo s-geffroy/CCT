@@ -221,10 +221,17 @@ def test_hostile_client_finds_no_engine_data_before_reveal(client):
     assert "reference" in revealed
 
 
-def test_no_route_exposes_analysis_without_session_control(client):
-    """Doc 08 : aucun point d'entree non garde ne doit renvoyer d'analyse moteur."""
+def test_every_analysis_route_is_covered_by_the_hostile_client_test(client):
+    """Doc 08 : aucun point d'entree d'analyse non garde. Toute nouvelle route
+    d'analyse doit etre ajoutee ici ET au test client hostile de test_analysis."""
     paths = client.get("/openapi.json").json()["paths"]
-    assert not [p for p in paths if "analys" in p or "reference" in p or "expand" in p]
+    analysis_paths = {p for p in paths if "analys" in p or "reference" in p or "expand" in p}
+    assert analysis_paths == {
+        "/api/v1/analysis-jobs",
+        "/api/v1/analysis-jobs/{job_id}",
+        "/api/v1/analysis-jobs/{job_id}/cancel",
+        "/api/v1/analysis-jobs/{job_id}/events",
+    }
 
 
 def test_export_json_and_pgn(client):

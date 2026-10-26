@@ -121,6 +121,8 @@ COPY backend/pyproject.toml backend/uv.lock /backend/
 RUN cd /backend && UV_PROJECT_ENVIRONMENT=/venv UV_PYTHON_DOWNLOADS=never \
     uv sync --frozen --only-group dev --inexact --no-install-project
 COPY backend/tests /app/tests
-RUN chmod -R a+rX /app/tests
+RUN chmod -R a+rX /app/tests /backend
 USER app
-CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/app/tests"]
+# Plafond dur : un test bloque ne laisse pas un conteneur `appctl run` orphelin
+# (appctl down ne touche pas aux conteneurs ponctuels).
+CMD ["timeout", "--signal=KILL", "1200", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "-c", "/backend/pyproject.toml", "--rootdir", "/app", "/app/tests"]

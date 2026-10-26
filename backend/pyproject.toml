@@ -19,3 +19,7 @@ dev = [
 [tool.uv]
 package = false
 
+
+[tool.pytest.ini_options]
+# Un test bloque laisse une pile d'appels dans la sortie au lieu d'un silence.
+faulthandler_timeout = 120

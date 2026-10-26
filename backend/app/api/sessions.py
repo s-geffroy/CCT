@@ -16,11 +16,15 @@ from fastapi.responses import PlainTextResponse
 from pydantic import Field
 
 from ..domain import training
-from ..persistence import repo, sessions_repo
+from ..domain.errors import DomainError
+from ..log import get_logger
+from ..persistence import analysis_repo, repo, sessions_repo
 from ..persistence.db import utc_now
+from .analysis import PRIORITY_SESSION_REFERENCE, default_settings, enqueue, job_view
 from .schemas import StrictModel
 
 router = APIRouter(prefix="/api/v1")
+log = get_logger("api.sessions")
 
 Revision = Annotated[int, Field(ge=1)]
 Assessment = Literal["white_better", "black_better", "equal", "initiative", "attack", "unclear"]
@@ -31,6 +35,9 @@ class SessionIn(StrictModel):
     position_id: UUID
     mode: Literal["mental", "tree"]
     allow_text_notes: bool = True
+    # Preparer la reference en arriere-plan pendant que le joueur calcule ;
+    # rien n'en sort avant la revelation.
+    start_analysis_in_background: bool = True
 
 
 class NodeIn(StrictModel):
@@ -71,7 +78,7 @@ class SubmitIn(StrictModel):
 
 # ------------------------------------------------------------------- vue
 
-def session_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+def session_view(conn: sqlite3.Connection, row: sqlite3.Row, scheduler=None) -> dict:
     position = repo.get_position(conn, row["position_id"])
     can_undo, can_redo = sessions_repo.undo_redo_flags(conn, row)
     view = {
@@ -94,24 +101,48 @@ def session_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "can_redo": row["state"] == "active" and can_redo,
         "attempt": sessions_repo.get_attempt(conn, row["id"]),
     }
+    job = analysis_repo.get(conn, row["reference_job_id"]) if row["reference_job_id"] else None
     if row["state"] in REVEALED_STATES:
-        # Lot 3 : l'analyse de reference sera jointe ici, et seulement ici.
-        view["reference"] = {
-            "status": "not_available",
-            "message": "Analyse moteur pas encore disponible dans cette version.",
-        }
+        # Seul endroit ou la reference est jointe. job_view applique encore la
+        # regle d'echiquier : une autre seance non revelee sur la meme position
+        # la masque.
+        if job is None:
+            view["reference"] = {"status": "not_available",
+                                 "message": "Aucune analyse moteur : moteur indisponible lors de la seance."}
+        else:
+            view["reference"] = {"status": "available", "job": job_view(conn, scheduler, job)}
+    elif job is not None:
+        # Avant revelation : l'avancement seulement.
+        hidden = analysis_repo.hidden_view(job)
+        view["preparation"] = {"job_id": job["id"], "progress_category": hidden["progress_category"],
+                               "is_ready": hidden["is_ready"]}
     return view
 
 
 def _view(request: Request, session_id: str) -> dict:
     with request.app.state.db.session() as conn:
-        return session_view(conn, sessions_repo.get(conn, session_id))
+        return session_view(conn, sessions_repo.get(conn, session_id), request.app.state.scheduler)
 
 
 def _mutate(request: Request, session_id: UUID, expected: int, action, **kwargs) -> dict:
     with request.app.state.db.session() as conn:
         sessions_repo.mutate(conn, str(session_id), expected, lambda row: action(conn, row), **kwargs)
-        return session_view(conn, sessions_repo.get(conn, str(session_id)))
+        return session_view(conn, sessions_repo.get(conn, str(session_id)), request.app.state.scheduler)
+
+
+def _start_reference(request: Request, conn: sqlite3.Connection, row: sqlite3.Row) -> None:
+    """Lance (ou reutilise via le cache) l'analyse de reference de la seance."""
+    if request.app.state.engine.info is None:
+        return
+    try:
+        job, _ = enqueue(request, conn, position_id=row["position_id"], session_id=row["id"],
+                         purpose="initial_reference", priority=PRIORITY_SESSION_REFERENCE,
+                         settings=default_settings())
+    except DomainError as exc:
+        # Pas de reference (position terminale, file pleine...) : la seance reste possible.
+        log.warning("seance %s : reference non lancee (%s)", row["id"][:8], exc.code)
+        return
+    conn.execute("UPDATE sessions SET reference_job_id = ? WHERE id = ?", (job["id"], row["id"]))
 
 
 # ----------------------------------------------------------------- routes
@@ -120,7 +151,9 @@ def _mutate(request: Request, session_id: UUID, expected: int, action, **kwargs)
 def create_session(body: SessionIn, request: Request) -> dict:
     with request.app.state.db.session() as conn:
         session_id = sessions_repo.create(conn, str(body.position_id), body.mode, body.allow_text_notes)
-        return session_view(conn, sessions_repo.get(conn, session_id))
+        if body.start_analysis_in_background:
+            _start_reference(request, conn, sessions_repo.get(conn, session_id))
+        return session_view(conn, sessions_repo.get(conn, session_id), request.app.state.scheduler)
 
 
 @router.get("/sessions/{session_id}")
@@ -225,8 +258,18 @@ def submit(session_id: UUID, body: SubmitIn, request: Request) -> dict:
 
 @router.post("/sessions/{session_id}/reveal")
 def reveal(session_id: UUID, body: RevisionIn, request: Request) -> dict:
-    return _mutate(request, session_id, body.expected_revision,
+    view = _mutate(request, session_id, body.expected_revision,
                    lambda conn, row: sessions_repo.reveal(conn, row), require_state="submitted")
+    with request.app.state.db.session() as conn:
+        row = sessions_repo.get(conn, str(session_id))
+        if row["reference_job_id"] is None:
+            # Moteur indisponible au debut de la seance : on lance la reference maintenant.
+            _start_reference(request, conn, row)
+            view = session_view(conn, sessions_repo.get(conn, str(session_id)), request.app.state.scheduler)
+        else:
+            # Les flux SSE ouverts passent de « etat seul » a « lignes completes ».
+            request.app.state.scheduler.notify_threadsafe(row["reference_job_id"])
+    return view
 
 
 @router.post("/sessions/{session_id}/abandon")

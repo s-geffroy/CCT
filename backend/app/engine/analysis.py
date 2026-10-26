@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import chess
@@ -41,7 +42,7 @@ class RootAnalysis:
     legal_moves_count: int
     multipv: int
     target_depth: int
-    status: str  # 'terminal' | 'depth_met' | 'budget_exhausted' | 'incomplete'
+    status: str  # 'terminal' | 'depth_met' | 'budget_exhausted' | 'incomplete' | 'cancelled'
     lines: list[LineDTO]
     stages_reached_s: dict[int, float] = field(default_factory=dict)
     elapsed_s: float = 0.0
@@ -69,7 +70,15 @@ async def analyse_root(
     budget_s: float = 300.0,
     stages: tuple[int, ...] = DEFAULT_STAGES,
     on_stage=None,
+    on_progress: Callable[[str, RootAnalysis], None] | None = None,
+    stop_event: asyncio.Event | None = None,
 ) -> RootAnalysis:
+    """Recherche racine progressive.
+
+    `on_progress(kind, partiel)` est appele a chaque info utile (`kind="info"`)
+    et a chaque palier atteste (`kind="stage"`) ; `stop_event` interrompt la
+    recherche (annulation), meme si Stockfish n'emet rien pendant longtemps.
+    """
     if not board.is_valid():
         # Une position invalide n'est jamais envoyee au moteur (T06).
         raise ValueError("position invalide : analyse refusee")
@@ -85,7 +94,20 @@ async def analyse_root(
     status = "budget_exhausted"
     t0 = time.monotonic()
 
+    def partial(current_status: str) -> RootAnalysis:
+        return RootAnalysis(
+            legal_moves_count=legal, multipv=k, target_depth=target_depth, status=current_status,
+            lines=[lines[i] for i in sorted(lines)], stages_reached_s=dict(reached),
+            elapsed_s=round(time.monotonic() - t0, 3), nodes=last_nodes, nps=last_nps,
+        )
+
     with await engine.analysis(board, chess.engine.Limit(depth=target_depth), multipv=k) as analysis:
+        stopper = None
+        if stop_event is not None:
+            async def watch() -> None:
+                await stop_event.wait()
+                analysis.stop()
+            stopper = asyncio.create_task(watch())
         try:
             async with asyncio.timeout(budget_s):
                 async for info in analysis:
@@ -112,14 +134,23 @@ async def analyse_root(
                                 reached[stage] = round(time.monotonic() - t0, 3)
                                 if on_stage:
                                     on_stage(stage, reached[stage])
+                                if on_progress:
+                                    on_progress("stage", partial("provisional"))
+                    if on_progress:
+                        on_progress("info", partial("provisional"))
             # Iteration terminee sans timeout : Stockfish a fini sa recherche.
             floor = min((line.exact_depth for line in lines.values()), default=0)
             # Fin sans profondeur attestee pour toutes les lignes : on ne
             # pretend ni succes ni budget epuise.
             status = "depth_met" if len(lines) == k and floor >= target_depth else "incomplete"
+            if stop_event is not None and stop_event.is_set():
+                status = "cancelled"
         except TimeoutError:
             analysis.stop()
             status = "budget_exhausted"
+        finally:
+            if stopper is not None:
+                stopper.cancel()
 
     ordered = [lines[i] for i in sorted(lines)]
     return RootAnalysis(

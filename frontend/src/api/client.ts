@@ -156,8 +156,52 @@ export type Session = {
   can_undo: boolean;
   can_redo: boolean;
   attempt: Attempt | null;
-  reference?: { status: string; message: string };
+  preparation?: { job_id: string; progress_category: string; is_ready: boolean };
+  reference?: { status: 'available'; job: AnalysisJob } | { status: 'not_available'; message: string };
 };
+
+export type EngineScore = { kind: 'cp' | 'mate' | 'unknown'; value: number | null; perspective: 'white'; bound: 'lower' | 'upper' | null };
+
+export type AnalysisLine = {
+  rank: number;
+  root_move_uci: string;
+  root_move_san: string | null;
+  pv_uci: string[];
+  pv_san: string[];
+  depth: number;
+  exact_depth: number;
+  seldepth: number | null;
+  score: EngineScore;
+  status: 'provisional' | 'depth_met' | 'budget_exhausted' | 'cancelled' | 'incomplete';
+};
+
+export type JobState = 'queued' | 'running' | 'complete_depth' | 'budget_exhausted' | 'incomplete' | 'cancelled' | 'failed' | 'interrupted' | 'terminal';
+
+export type VisibleJob = {
+  id: string;
+  position_id: string;
+  visibility: 'full';
+  purpose: 'study' | 'initial_reference';
+  state: JobState;
+  revision: number;
+  settings: { target_depth: number; multipv_max: number; budget_s: number };
+  stages_reached_s: Record<string, number>;
+  target_depth_met: boolean;
+  legal_moves: number | null;
+  multipv: number | null;
+  root_coverage: 'all_root_moves' | 'top_moves_only' | null;
+  elapsed_s: number | null;
+  nps: number | null;
+  error: string | null;
+  cancel_requested: boolean;
+  lines: AnalysisLine[];
+  reused?: boolean;
+};
+
+export type HiddenJob = { id: string; visibility: 'hidden'; progress_category: string; is_ready: boolean };
+export type AnalysisJob = VisibleJob | HiddenJob;
+
+export const FINAL_JOB_STATES: JobState[] = ['complete_depth', 'budget_exhausted', 'incomplete', 'cancelled', 'failed', 'interrupted', 'terminal'];
 
 export type HistoryItem = {
   id: string;
@@ -204,5 +248,10 @@ export const api = {
     post<Session>(`/api/v1/sessions/${s.id}/submit`, { expected_revision: s.revision, self_assessment }),
   reveal: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/reveal`, { expected_revision: s.revision }),
   abandon: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/abandon`, { expected_revision: s.revision }),
+  createJob: (position_id: string, settings: { target_depth: number; multipv_max: number; budget_s: number }) =>
+    post<AnalysisJob>('/api/v1/analysis-jobs', { position_id, ...settings }),
+  job: (id: string) => request<AnalysisJob>(`/api/v1/analysis-jobs/${id}`),
+  jobs: (positionId: string) => request<{ items: AnalysisJob[] }>(`/api/v1/analysis-jobs?position_id=${positionId}`),
+  cancelJob: (id: string) => post<AnalysisJob>(`/api/v1/analysis-jobs/${id}/cancel`, {}),
   history: (limit = 50) => request<Page<HistoryItem>>(`/api/v1/history?limit=${limit}`),
 };

@@ -13,6 +13,8 @@ import { ChessboardAdapter } from '../../adapters/ChessboardAdapter';
 import { USER_ROOT, userTreeToNodes } from '../../adapters/userTree';
 import { MoveText } from '../../components/MoveText';
 import { formatHistory } from '../positions/RetainedPanel';
+import { AnalysisPanel, type ShownPosition } from '../analysis/AnalysisPanel';
+import { useJobStream } from '../analysis/useJobStream';
 
 export const ASSESSMENT_LABEL: Record<Assessment, string> = {
   white_better: 'avantage blanc',
@@ -62,6 +64,13 @@ export function TrainingView({ sessionId, onExit }: Props) {
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [comment, setComment] = useState('');
+  const [shownPv, setShownPv] = useState<ShownPosition | null>(null);
+  const referenceJob = session?.reference?.status === 'available' ? session.reference.job : null;
+  // Flux de la reference : n'est ouvert qu'apres revelation (avant, il n'y a rien a lire).
+  const liveReference = useJobStream(referenceJob?.id ?? null, referenceJob);
+  // Avant revelation : le flux ne transporte que l'etat de preparation.
+  const preparingId = session && !['revealed', 'reviewed'].includes(session.state) ? session.preparation?.job_id ?? null : null;
+  const preparing = useJobStream(preparingId);
 
   useEffect(() => {
     api.session(sessionId).then((s) => {
@@ -140,12 +149,13 @@ export function TrainingView({ sessionId, onExit }: Props) {
         <div>
           <ChessboardAdapter
             id="training-board"
-            fen={selectedNode?.fen ?? rootFen}
+            fen={shownPv?.fen ?? selectedNode?.fen ?? rootFen}
             orientation={orientation}
             mode={active && s.mode === 'tree' ? 'play' : 'locked'}
-            lastMove={lastMove}
+            lastMove={shownPv?.lastMove ?? lastMove}
             onMove={addMove}
           />
+          {shownPv && <p className="shown" data-testid="shown-position">Variante moteur : {shownPv.label}</p>}
           <button type="button" onClick={() => setOrientation((o) => (o === 'white' ? 'black' : 'white'))}>
             Retourner l'echiquier
           </button>
@@ -271,6 +281,12 @@ export function TrainingView({ sessionId, onExit }: Props) {
             </form>
           )}
 
+          {s.preparation && !revealed && (
+            <p className="note" data-testid="preparation">
+              Reference moteur : {(preparing?.visibility === 'hidden' ? preparing.is_ready : s.preparation.is_ready)
+                ? 'prete, elle sera montree apres la revelation' : 'en preparation (masquee)'}
+            </p>
+          )}
           {s.state === 'submitted' && (
             <div className="submitted">
               <p>Tentative figee : elle ne peut plus etre modifiee.</p>
@@ -289,6 +305,12 @@ export function TrainingView({ sessionId, onExit }: Props) {
           <button type="button" onClick={onExit}>Retour aux positions</button>
         </div>
       </div>
+      {revealed && liveReference?.visibility === 'full' && (
+        <AnalysisPanel key={liveReference.id} job={liveReference} rootFen={rootFen} onShow={setShownPv} />
+      )}
+      {revealed && liveReference?.visibility === 'hidden' && (
+        <p className="note">Reference masquee : une autre seance non revelee porte sur cette position.</p>
+      )}
     </section>
   );
 }
@@ -325,7 +347,9 @@ function Debrief({ session }: { session: Session }) {
         </dl>
       )}
       {attempt.notes && <p className="notes">Notes : {attempt.notes}</p>}
-      <p className="reference" data-testid="reference-status">{session.reference?.message}</p>
+      {session.reference?.status === 'not_available' && (
+        <p className="reference" data-testid="reference-status">{session.reference.message}</p>
+      )}
     </section>
   );
 }

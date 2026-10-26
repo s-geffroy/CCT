@@ -52,6 +52,7 @@ class Settings:
     # mutations (protection contre un site tiers qui viserait localhost).
     allowed_hosts: list[str] = field(default_factory=lambda: _list_env("ALLOWED_HOSTS", ["127.0.0.1", "localhost"]))
     allowed_origins: list[str] = field(default_factory=lambda: _list_env("ALLOWED_ORIGINS", []))
+    max_queued_jobs: int = field(default_factory=lambda: _int_env("MAX_QUEUED_JOBS", 20, 1, 1000))
     engine_enabled: bool = field(default_factory=lambda: os.environ.get("ENGINE_ENABLED", "1") != "0")
 
 
