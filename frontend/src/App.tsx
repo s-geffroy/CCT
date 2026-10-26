@@ -20,6 +20,8 @@ import { VariationTree } from './components/VariationTree';
 import { PositionEditor } from './features/PositionEditor';
 import { RecentPositions } from './features/positions/RecentPositions';
 import { RetainedPanel } from './features/positions/RetainedPanel';
+import { HistoryView } from './features/training/HistoryView';
+import { TrainingView } from './features/training/TrainingView';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 type Tab = 'fen' | 'pgn' | 'editor' | 'retained';
@@ -36,8 +38,7 @@ function gameLabel(g: Game): string {
   return `${g.index + 1}. ${players || 'Partie'}${h.Event && h.Event !== '?' ? ` (${h.Event})` : ''}`;
 }
 
-export function App() {
-  const [meta, setMeta] = useState<Meta | null>(null);
+function PositionsModule({ onTrain }: { onTrain: (position: Position, mode: 'mental' | 'tree') => void }) {
   const [tab, setTab] = useState<Tab>('fen');
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +64,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    api.meta().then(setMeta).catch(() => setMeta(null));
     refreshRecent();
   }, [refreshRecent]);
 
@@ -145,13 +145,7 @@ export function App() {
   }
 
   return (
-    <main className="app">
-      <header>
-        <h1>Chess Calculation Trainer</h1>
-        <p className="meta">
-          {meta?.engine ? `${meta.engine.name} · ${meta.engine.threads} thread(s) · ${meta.engine.hash_mb} Mo` : 'moteur indisponible'}
-        </p>
-      </header>
+    <>
       <nav role="tablist" aria-label="Source de la position">
         {(['fen', 'pgn', 'editor'] as const).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} type="button" onClick={() => setTab(t)}>
@@ -238,7 +232,7 @@ export function App() {
       )}
 
       <div className="library">
-        <RetainedPanel position={retained} displayedFen={displayedFen} onShow={() => setTab('retained')} />
+        <RetainedPanel position={retained} displayedFen={displayedFen} onShow={() => setTab('retained')} onTrain={onTrain} />
         <RecentPositions
           positions={recent}
           selectedId={retained?.id ?? null}
@@ -248,6 +242,62 @@ export function App() {
           }}
         />
       </div>
+    </>
+  );
+}
+
+type Route = { view: 'positions' } | { view: 'history' } | { view: 'session'; id: string };
+
+function parseRoute(hash: string): Route {
+  const m = /^#\/session\/([0-9a-f-]{36})$/.exec(hash);
+  if (m) return { view: 'session', id: m[1] };
+  if (hash === '#/history') return { view: 'history' };
+  return { view: 'positions' };
+}
+
+export function App() {
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.meta().then(setMeta).catch(() => setMeta(null));
+    const onHash = () => setRoute(parseRoute(window.location.hash));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const go = (hash: string) => {
+    window.location.hash = hash;
+  };
+
+  async function train(position: Position, mode: 'mental' | 'tree') {
+    setError(null);
+    try {
+      const session = await api.createSession(position.id, mode);
+      go(`#/session/${session.id}`);
+    } catch (err) {
+      setError(message(err));
+    }
+  }
+
+  return (
+    <main className="app">
+      <header>
+        <h1>Chess Calculation Trainer</h1>
+        <p className="meta">
+          {meta?.engine ? `${meta.engine.name} · ${meta.engine.threads} thread(s) · ${meta.engine.hash_mb} Mo` : 'moteur indisponible'}
+        </p>
+        <nav aria-label="Modules" className="modules">
+          <a href="#/positions" aria-current={route.view === 'positions' ? 'page' : undefined}>Positions</a>
+          {route.view === 'session' && <a href={`#/session/${route.id}`} aria-current="page">Seance</a>}
+          <a href="#/history" aria-current={route.view === 'history' ? 'page' : undefined}>Historique</a>
+        </nav>
+      </header>
+      {error && <p role="alert" className="error">{error}</p>}
+      {route.view === 'positions' && <PositionsModule onTrain={train} />}
+      {route.view === 'history' && <HistoryView onOpen={(id) => go(`#/session/${id}`)} />}
+      {route.view === 'session' && <TrainingView key={route.id} sessionId={route.id} onExit={() => go('#/positions')} />}
     </main>
   );
 }

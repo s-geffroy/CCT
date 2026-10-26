@@ -40,8 +40,9 @@ export function MoveText({ nodes, rootId, selectedNodeId, onSelect, onLoadMore }
         for (const alt of parent.children.slice(1).filter((id) => nodes[id])) {
           out.push(
             <span key={'v' + alt} className="variation" style={{ marginLeft: `${depth + 1}em` }}>
-              ( {renderLine(alt, depth + 1)} )
+              ( {renderLine(alt, depth + 1)})
             </span>,
+            ' ',
           );
         }
         forceNumber = true;

@@ -103,6 +103,77 @@ export type Meta = {
 
 type Page<T> = { items: T[]; limit: number; offset: number };
 
+export type Assessment = 'white_better' | 'black_better' | 'equal' | 'initiative' | 'attack' | 'unclear';
+
+export type UserNode = {
+  id: string;
+  parent_id: string | null;
+  order_index: number;
+  move_uci: string;
+  move_san: string;
+  fen_after: string;
+  comment: string;
+  human_assessment: Assessment | null;
+  created_at: string;
+};
+
+export type WrittenLine = {
+  text: string;
+  moves_uci: string[];
+  moves_san: string[];
+  error: { ply: number; token: string; code: string; message: string } | null;
+};
+
+export type SelfAssessment = { candidates: string; main_threat: string; evaluation: Assessment | null };
+
+export type Attempt = {
+  submitted_at: string;
+  mode: 'mental' | 'tree';
+  root_fen: string;
+  notes: string;
+  self_assessment: SelfAssessment | null;
+  tree: Record<string, UserNode>;
+  written_lines?: WrittenLine[];
+  no_trace: boolean;
+};
+
+export type Session = {
+  id: string;
+  mode: 'mental' | 'tree';
+  state: 'active' | 'submitted' | 'revealed' | 'reviewed' | 'abandoned';
+  revision: number;
+  started_at: string;
+  submitted_at: string | null;
+  revealed_at: string | null;
+  abandoned_at: string | null;
+  duration_ms: number | null;
+  allow_text_notes: boolean;
+  notes: string;
+  lines_text: string;
+  self_assessment: SelfAssessment | null;
+  position: Position;
+  tree: { nodes: Record<string, UserNode> };
+  can_undo: boolean;
+  can_redo: boolean;
+  attempt: Attempt | null;
+  reference?: { status: string; message: string };
+};
+
+export type HistoryItem = {
+  id: string;
+  mode: 'mental' | 'tree';
+  state: Session['state'];
+  started_at: string;
+  submitted_at: string | null;
+  revealed_at: string | null;
+  duration_ms: number | null;
+  position_id: string;
+  fen: string;
+};
+
+const send = <T>(method: string, path: string, payload?: unknown) =>
+  request<T>(path, { method, body: payload === undefined ? undefined : JSON.stringify(payload) });
+
 export const api = {
   meta: () => request<Meta>('/api/v1/meta'),
   validateFen: (fen: string) => post<FenValidation>('/api/v1/positions/validate', { fen }),
@@ -113,4 +184,25 @@ export const api = {
   createPosition: (source: PositionSource) => post<CreatedPosition>('/api/v1/positions', source),
   position: (id: string) => request<Position>(`/api/v1/positions/${id}`),
   positions: (limit = 20) => request<Page<Position>>(`/api/v1/positions?limit=${limit}`),
+
+  createSession: (position_id: string, mode: Session['mode'], allow_text_notes = true) =>
+    post<Session>('/api/v1/sessions', { position_id, mode, allow_text_notes }),
+  session: (id: string) => request<Session>(`/api/v1/sessions/${id}`),
+  addNode: (s: Session, parent: string | null, move: string) =>
+    post<{ node: UserNode; session: Session }>(`/api/v1/sessions/${s.id}/nodes`, {
+      parent_node_id: parent, move, expected_revision: s.revision,
+    }),
+  patchNode: (s: Session, nodeId: string, patch: { comment?: string; human_assessment?: Assessment; clear_assessment?: boolean; promote?: boolean }) =>
+    send<Session>('PATCH', `/api/v1/sessions/${s.id}/nodes/${nodeId}`, { expected_revision: s.revision, ...patch }),
+  deleteNode: (s: Session, nodeId: string) =>
+    send<Session>('DELETE', `/api/v1/sessions/${s.id}/nodes/${nodeId}?expected_revision=${s.revision}`),
+  undo: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/undo`, { expected_revision: s.revision }),
+  redo: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/redo`, { expected_revision: s.revision }),
+  saveNotes: (s: Session, notes: { notes?: string; lines_text?: string }) =>
+    send<Session>('PUT', `/api/v1/sessions/${s.id}/notes`, { expected_revision: s.revision, ...notes }),
+  submit: (s: Session, self_assessment: SelfAssessment | null) =>
+    post<Session>(`/api/v1/sessions/${s.id}/submit`, { expected_revision: s.revision, self_assessment }),
+  reveal: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/reveal`, { expected_revision: s.revision }),
+  abandon: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/abandon`, { expected_revision: s.revision }),
+  history: (limit = 50) => request<Page<HistoryItem>>(`/api/v1/history?limit=${limit}`),
 };

@@ -10,6 +10,7 @@ Aucune promesse d'exhaustivite : jusqu'a 20 premiers coups, profondeur cible
 - Arbitrages et ecarts a la spec : `docs/decisions.md`
 - Rapport du Lot 0 (versions reelles, API constatees, bench moteur) : `docs/lot0-report.md`
 - Rapport du Lot 1 (SQLite, migrations, instantanes de position) : `docs/lot1-report.md`
+- Rapport du Lot 2 (seances B/C, immuabilite, anti-spoiler) : `docs/lot2-report.md`
 
 Cible finale : Windows 11 x64 + Docker Desktop/WSL 2, image GHCR
 `linux/amd64` et installation par double-clic (Lot 6). **Ce VPS sert au

@@ -12,6 +12,7 @@ from starlette.staticfiles import StaticFiles
 
 from .api.library import router as library_router
 from .api.routes import router
+from .api.sessions import router as sessions_router
 from .domain.errors import DomainError
 from .engine.uci import EngineManager
 from .persistence.db import Database
@@ -85,6 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(router)
     app.include_router(library_router)
+    app.include_router(sessions_router)
     _mount_static(app, settings.static_dir)
     return app
 

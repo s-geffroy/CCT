@@ -31,3 +31,15 @@ nav[role=tablist] button[aria-selected=true] { font-weight: bold; text-decoratio
 .recent button[aria-current=true] { font-weight: 600; }
 .primary { font-weight: 600; margin-top: .75rem; display: block; }
 .more { border: 1px dashed #888; background: none; cursor: pointer; font: inherit; margin-left: .3em; }
+.modules { display: flex; gap: 1rem; margin-bottom: .5rem; }
+.modules a[aria-current=page] { font-weight: 700; }
+.training-head { display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
+.badge { border: 1px solid #888; border-radius: 1em; padding: 0 .6em; font-size: .9em; }
+.block { display: block; margin: .4rem 0; }
+.block textarea, .block input, .block select { display: block; max-width: 100%; }
+.tree-actions, .finish, .submitted, .train-actions { margin-top: .75rem; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.tree-actions fieldset { width: 100%; }
+.written-lines .error { font-style: normal; }
+.history { border-collapse: collapse; width: 100%; }
+.history td, .history th { border-bottom: 1px solid #ddd; padding: .3rem .5rem; text-align: left; }
+.context { color: #555; }

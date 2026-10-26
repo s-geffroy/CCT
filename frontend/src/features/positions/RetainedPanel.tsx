@@ -40,9 +40,10 @@ type Props = {
   position: Position | CreatedPosition | null;
   displayedFen: string;
   onShow: () => void;
+  onTrain?: (position: Position, mode: 'mental' | 'tree') => void;
 };
 
-export function RetainedPanel({ position, displayedFen, onShow }: Props) {
+export function RetainedPanel({ position, displayedFen, onShow, onTrain }: Props) {
   return (
     <section className="retained" aria-label="Position retenue" data-position-id={position?.id ?? ''}>
       <h2>Position retenue</h2>
@@ -73,6 +74,12 @@ export function RetainedPanel({ position, displayedFen, onShow }: Props) {
             <p className="note">La position affichee differe de la position retenue.</p>
           )}
           <button type="button" onClick={onShow}>Afficher la position retenue</button>
+          {onTrain && !position.outcome && (
+            <div className="train-actions" role="group" aria-label="S'entrainer sur cette position">
+              <button type="button" className="primary" onClick={() => onTrain(position, 'mental')}>Calcul mental (B)</button>
+              <button type="button" className="primary" onClick={() => onTrain(position, 'tree')}>Construire mon arbre (C)</button>
+            </div>
+          )}
         </>
       )}
     </section>
