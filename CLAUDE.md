@@ -39,10 +39,15 @@ les labels a la main.
 |---|---|---|
 | `app` | l'image livree (`runtime`) | `sudo appctl rebuild` |
 | `tests` | image `test` : pytest dans l'image finale | `sudo appctl run tests` |
+| `e2e` | Playwright/Chromium contre `app` (alias `cct-web`) | `sudo appctl rebuild && sudo appctl run e2e` |
 | `devtools` | Node + Python + uv sur le depot monte, reseau `cct-dev` | `sudo appctl run devtools sh -c '...'` |
 
 `devtools` sert a generer les lockfiles et a lancer typecheck/vitest ; rien ne
 s'execute sur l'hote, meme si `node` ou `python3` y sont presents.
+
+`e2e` joint l'application par l'alias `cct-web`, jamais `app` : Chromium force
+HTTPS sur ce nom (`.app` est un TLD en liste HSTS preload). Captures et
+rapports dans `tests/e2e/results/` (ignore par git).
 
 ## Logs
 
@@ -111,8 +116,8 @@ s'execute sur l'hote, meme si `node` ou `python3` y sont presents.
 
 ## Fin de tache
 
-1. `tests/test_smoke.sh` (pytest dans l'image + typecheck/vitest) et les tests
-   pertinents ;
+1. `tests/test_smoke.sh` (typecheck/vitest, pytest dans l'image, Playwright) et
+   les tests pertinents ;
 2. `sudo appctl validate` ;
 3. `sudo appctl rebuild` si necessaire ;
 4. `sudo appctl status` -- le conteneur doit finir `healthy` ;

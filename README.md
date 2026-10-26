@@ -22,14 +22,15 @@ developpement et aux tests uniquement** : aucun port publie.
 | `backend/tests/` | pytest, dont integration avec le vrai Stockfish |
 | `backend/Dockerfile` | multi-stage : `stockfish` (sf_19 universal), `frontend`, `pydeps`, `runtime`, `test`, `devtools` |
 | `frontend/` | React 19 + TypeScript + Vite ; `react-chessboard`, `react-arborist` via adaptateurs |
-| `compose.yaml` | stack du VPS (`app`, `tests`, `devtools`) |
+| `tests/e2e/` | Playwright (Chromium reel, 1280 et 1024 px) contre le service `app` |
+| `compose.yaml` | stack du VPS (`app`, `tests`, `e2e`, `devtools`) |
 
 ## Cycle de developpement (VPS)
 
 Rien ne s'execute sur l'hote : tout passe par `appctl`.
 
 ```bash
-tests/test_smoke.sh                 # vitest/typecheck + pytest dans l'image
+tests/test_smoke.sh                 # vitest/typecheck, pytest dans l'image, Playwright
 sudo appctl validate
 sudo appctl rebuild
 sudo appctl status                  # le conteneur 'app' doit passer healthy

@@ -98,13 +98,36 @@ reporte au Lot 6 (release).
 | Host/Origin/CORS, taille de requete, XSS commentaires | `test_api.py`, `MoveText` |
 
 Resultats : **pytest 43/43** (image finale, Stockfish reel), **vitest 9/9**,
-**typecheck OK**, image construite, conteneur `app` sain.
+**typecheck OK**, **Playwright 16/16** (8 scenarios x 1280 et 1024 px, Chromium
+reel), image construite, conteneur `app` sain.
+
+### Navigateur reel (Playwright 1.64.0, Chromium)
+
+Valide dans un vrai navigateur, contre le conteneur `app` :
+
+- glisser-deposer `e2-e4` (capteur dnd-kit) -> appel `/moves/play` -> SAN et
+  position venant du serveur ;
+- coup illegal glisse : message `ILLEGAL_MOVE`, echiquier intact ;
+- promotion : boite de choix, `e8=N` sans dame implicite ;
+- editeur : pieces libres posees, piece retiree en la deposant hors de
+  l'echiquier, FEN mise a jour, explication serveur des roques incoherents ;
+- PGN : navigation dans les deux vues (en ligne, arborist), commentaire
+  `<script>` affiche en texte et non execute ;
+- aucune requete hors de l'origine de l'application (fonctionnement hors ligne).
+
+Constats :
+
+- **Editeur trop haut a 1024 x 768** : les pieces libres (~85 px chacune) et le
+  formulaire depassent la hauteur ; la rangee noire sort de l'ecran des qu'on
+  pose une piece en bas. A traiter au Lot 5 (pieces libres plus petites ou de
+  part et d'autre de l'echiquier).
+- **Nom d'hote `app` inutilisable** dans Chromium : HTTPS force par HSTS
+  preload (`.app`). Alias reseau `cct-web` pour les tests.
 
 ## Non valide a ce stade (dit sans detour)
 
-- **Glisser-deposer, promotion et pieces libres dans un vrai navigateur** : les
-  tests tournent sous jsdom, qui ne simule pas le DnD. Playwright (Lot 5) ou un
-  essai manuel via une exposition tailnet temporaire sont necessaires.
+- Navigateurs autres que Chromium (Firefox, Edge reel sous Windows), tactile.
+- Navigation clavier sur l'echiquier : absente de react-chessboard (Lot 5).
 - Aucun test Windows, aucune CI GitHub (Lot 6).
 - Images de base non epinglees par digest.
 
