@@ -20,3 +20,7 @@ class InvalidInput(DomainError):
 
 class TooLarge(DomainError):
     status_code = 413
+
+
+class NotFound(DomainError):
+    status_code = 404

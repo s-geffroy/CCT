@@ -2,7 +2,9 @@ import type { PgnNode } from '../src/api/client';
 
 // 1. e4 e5 (1... c5 2. Nf3) 2. Nf3 {main <b>x</b>}
 function n(id: string, parent: string | null, ply: number, san: string | null, children: string[], comment = '', nags: number[] = []): PgnNode {
-  return { id, parent_id: parent, ply, uci: null, san, fen: '8/8/8/8/8/8/8/8 w - - 0 1', comment, starting_comment: '', nags, children };
+  const move_number = ply ? Math.floor((ply + 1) / 2) : null;
+  const color = ply ? (ply % 2 === 1 ? 'white' : 'black') : null;
+  return { id, parent_id: parent, ply, move_number, color, uci: null, san, fen: '8/8/8/8/8/8/8/8 w - - 0 1', comment, starting_comment: '', nags, children };
 }
 
 export const nodes: Record<string, PgnNode> = {

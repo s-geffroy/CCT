@@ -22,3 +22,21 @@ describe('toTreeRows', () => {
     expect(toTreeRows({ r: { ...nodes.r, children: [] } }, 'r')).toEqual([]);
   });
 });
+
+describe('arbre pagine et numerotation', () => {
+  it('signale la suite non chargee au lieu de la taire', () => {
+    const partial = { ...nodes };
+    delete (partial as Record<string, unknown>).nf3;
+    const rows = toTreeRows(partial, 'r');
+    expect(rows.map((r) => r.kind)).toEqual(['move', 'move', 'more']);
+    expect(rows[2].nodeId).toBe('e5');
+  });
+
+  it('utilise le numero de coup du serveur (partie depuis une FEN)', () => {
+    const fromFen = {
+      r: { ...nodes.r, children: ['k'] },
+      k: { ...nodes.e4, id: 'k', parent_id: 'r', ply: 1, move_number: 23, color: 'black' as const, san: 'Kd7', children: [] },
+    };
+    expect(toTreeRows(fromFen, 'r')[0].label).toBe('23... Kd7');
+  });
+});

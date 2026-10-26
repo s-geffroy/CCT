@@ -38,6 +38,8 @@ export type PgnNode = {
   id: string;
   parent_id: string | null;
   ply: number;
+  move_number: number | null;
+  color: 'white' | 'black' | null;
   uci: string | null;
   san: string | null;
   fen: string;
@@ -47,25 +49,68 @@ export type PgnNode = {
   children: string[];
 };
 
-export type PgnGame = {
+export type Game = {
+  id: string;
+  import_id: string;
   index: number;
   headers: Record<string, string>;
-  root_id: string;
-  nodes: Record<string, PgnNode>;
   warnings: string[];
   history_known: boolean;
+  root_node_id: string;
+  nodes_count: number;
+  imported_at: string;
 };
+
+export type TreePage = {
+  game_id: string;
+  root_id: string;
+  nodes: Record<string, PgnNode>;
+  truncated: boolean;
+  frontier: string[];
+};
+
+export type Position = {
+  id: string;
+  fen: string;
+  initial_fen: string;
+  history_uci: string[] | null;
+  history_san: string[] | null;
+  history_complete: boolean;
+  source_type: 'fen' | 'pgn' | 'editor';
+  source_game_id: string | null;
+  source_node_id: string | null;
+  turn: 'white' | 'black';
+  legal_moves_count: number;
+  outcome: string | null;
+  claimable_draw: string | null;
+  created_at: string;
+};
+
+export type CreatedPosition = Position & { created: boolean; warnings: string[] };
+
+export type PositionSource =
+  | { source: 'fen'; fen: string; history_uci?: string[] }
+  | { source: 'editor'; fen: string }
+  | { source: 'pgn'; game_id: string; node_id: string };
 
 export type PlayedMove = { uci: string; san: string; fen_after: string; outcome: string | null };
 
 export type Meta = {
   app_version: string;
+  schema_version: number;
   engine: { name: string; threads: number; hash_mb: number; build: Record<string, string> } | null;
 };
+
+type Page<T> = { items: T[]; limit: number; offset: number };
 
 export const api = {
   meta: () => request<Meta>('/api/v1/meta'),
   validateFen: (fen: string) => post<FenValidation>('/api/v1/positions/validate', { fen }),
-  importPgn: (pgn: string) => post<{ games: PgnGame[]; truncated: boolean }>('/api/v1/games/import-pgn', { pgn }),
   playMove: (fen: string, move: string) => post<PlayedMove>('/api/v1/moves/play', { fen, move }),
+  importPgn: (pgn: string) => post<{ import_id: string; games: Game[]; truncated: boolean }>('/api/v1/games/import-pgn', { pgn }),
+  tree: (gameId: string, root?: string) =>
+    request<TreePage>(`/api/v1/games/${gameId}/tree` + (root ? `?root=${encodeURIComponent(root)}` : '')),
+  createPosition: (source: PositionSource) => post<CreatedPosition>('/api/v1/positions', source),
+  position: (id: string) => request<Position>(`/api/v1/positions/${id}`),
+  positions: (limit = 20) => request<Page<Position>>(`/api/v1/positions?limit=${limit}`),
 };

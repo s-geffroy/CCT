@@ -111,6 +111,9 @@ rapports dans `tests/e2e/results/` (ignore par git).
 - Les donnees persistantes vont dans des named volumes, nommes `cct_<usage>`.
   L'application utilise `cct_data`, monte sur `/data` (SQLite). L'ancien
   `cct_state` du squelette n'est plus monte ; il n'est pas supprime.
+- Schema SQLite : migrations `backend/app/persistence/migrations/NNNN_*.sql`,
+  numerotees sans trou, jamais modifiees une fois livrees (en ajouter une).
+  Une sauvegarde `backup()` est faite automatiquement avant toute mise a niveau.
 - Ne supprime jamais un volume sans demande explicite.
 - N'execute jamais `docker volume prune`.
 

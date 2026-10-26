@@ -10,7 +10,7 @@ def test_health_live(client):
 def test_ready_reports_engine_down_without_crashing(client):
     r = client.get("/api/v1/health/ready")
     assert r.status_code == 503
-    assert r.json()["checks"] == {"engine": False, "data_dir_writable": True}
+    assert r.json()["checks"] == {"engine": False, "database": True, "data_dir_writable": True}
 
 
 def test_meta_without_engine(client):
@@ -43,10 +43,11 @@ def test_play_move_and_illegal_move(client):
 
 
 def test_import_pgn(client):
-    body = client.post("/api/v1/games/import-pgn", json={"pgn": PGN_WITH_VARIATIONS}).json()
-    game = body["games"][0]
+    r = client.post("/api/v1/games/import-pgn", json={"pgn": PGN_WITH_VARIATIONS})
+    assert r.status_code == 201
+    game = r.json()["games"][0]
     assert game["headers"]["Event"] == "Test"
-    assert len(game["nodes"]) == 13
+    assert game["nodes_count"] == 13
 
 
 def test_oversized_body_is_refused(client):

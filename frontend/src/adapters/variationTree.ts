@@ -9,8 +9,8 @@ import type { PgnNode } from '../api/client';
 
 export type TreeRow = {
   id: string;
-  kind: 'move' | 'variation';
-  nodeId: string | null; // noeud serveur (null pour un groupe « variante »)
+  kind: 'move' | 'variation' | 'more';
+  nodeId: string | null; // noeud serveur (null pour un groupe « variante » ; parent a completer pour 'more')
   label: string;
   comment: string;
   origin: 'user' | 'reference' | 'imported';
@@ -20,8 +20,10 @@ export type TreeRow = {
 const NAG_GLYPHS: Record<number, string> = { 1: '!', 2: '?', 3: '!!', 4: '??', 5: '!?', 6: '?!' };
 
 export function moveLabel(node: PgnNode, forceNumber: boolean): string {
-  const moveNumber = Math.floor((node.ply + 1) / 2);
-  const white = node.ply % 2 === 1;
+  // Numero et camp viennent du serveur (lus sur l'echiquier) : une partie avec
+  // en-tete FEN peut commencer aux Noirs, au coup 23.
+  const moveNumber = node.move_number ?? Math.floor((node.ply + 1) / 2);
+  const white = node.color ? node.color === 'white' : node.ply % 2 === 1;
   const prefix = white ? `${moveNumber}. ` : forceNumber ? `${moveNumber}... ` : '';
   const glyphs = node.nags.map((n) => NAG_GLYPHS[n] ?? `$${n}`).join('');
   return `${prefix}${node.san ?? ''}${glyphs}`;
@@ -42,7 +44,7 @@ export function toTreeRows(
     while (current) {
       const parent: PgnNode | undefined = current.parent_id ? nodes[current.parent_id] : undefined;
       const siblings = parent ? parent.children : [];
-      const alternatives = siblings[0] === current.id ? siblings.slice(1) : [];
+      const alternatives = siblings[0] === current.id ? siblings.slice(1).filter((id) => nodes[id]) : [];
       const variations: TreeRow[] = alternatives.map((altId) => ({
         id: `var-${++variationCounter}`,
         kind: 'variation',
@@ -63,6 +65,10 @@ export function toTreeRows(
       });
       first = variations.length > 0; // apres une variante, on renumerote le coup noir
       const next: string | undefined = current.children[0];
+      if (next && !nodes[next]) {
+        // Arbre pagine : la suite existe cote serveur mais n'est pas chargee.
+        rows.push({ id: `more-${current.id}`, kind: 'more', nodeId: current.id, label: '… suite non chargee', comment: '', origin, children: null });
+      }
       current = next ? nodes[next] : undefined;
     }
     return rows;

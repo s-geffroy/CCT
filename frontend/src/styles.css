@@ -5,6 +5,8 @@
 .board { position: relative; }
 .promotion { position: absolute; inset: 40% 10% auto; background: #fff; border: 1px solid #888; padding: .5rem; display: flex; gap: .5rem; flex-wrap: wrap; }
 .error { color: #a00000; }
+/* Toujours visible, meme quand l'editeur ou l'arbre ont fait defiler la page. */
+.error[role=alert] { position: sticky; top: 0; z-index: 10; background: #fff1f1; border: 1px solid #a00000; padding: .4rem .6rem; }
 .warning { color: #7a5200; font-size: .9em; }
 .movetext { line-height: 1.9; }
 .movetext .move { border: 0; background: none; padding: 0 .2em; cursor: pointer; font: inherit; }
@@ -18,3 +20,14 @@
 .fen { word-break: break-all; }
 nav[role=tablist] button[aria-selected=true] { font-weight: bold; text-decoration: underline; }
 :focus-visible { outline: 2px solid #3367d6; outline-offset: 2px; }
+.library { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem; }
+@media (max-width: 800px) { .library { grid-template-columns: 1fr; } }
+.retained dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem .75rem; }
+.retained dt { font-weight: 600; }
+.retained dd { margin: 0; word-break: break-word; }
+.note { color: #3367d6; }
+.recent ul { list-style: none; padding: 0; }
+.recent button { border: 0; background: none; text-align: left; cursor: pointer; padding: .2rem 0; font: inherit; }
+.recent button[aria-current=true] { font-weight: 600; }
+.primary { font-weight: 600; margin-top: .75rem; display: block; }
+.more { border: 1px dashed #888; background: none; cursor: pointer; font: inherit; margin-left: .3em; }

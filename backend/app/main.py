@@ -10,9 +10,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.staticfiles import StaticFiles
 
+from .api.library import router as library_router
 from .api.routes import router
 from .domain.errors import DomainError
 from .engine.uci import EngineManager
+from .persistence.db import Database
 from .log import get_logger, setup_logging
 from .settings import APP_VERSION, Settings, get_settings
 
@@ -31,6 +33,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         log.info("demarrage %s (donnees %s)", APP_VERSION, settings.data_dir)
+        try:
+            version = app.state.db.migrate()
+            log.info("base prete : schema v%d, journal %s", version, app.state.db.journal_mode)
+        except Exception as exc:
+            # Le serveur reste joignable : /ready signale la base indisponible.
+            log.error("base indisponible : %s: %s", type(exc).__name__, exc)
         if settings.engine_enabled:
             await app.state.engine.start()
         else:
@@ -42,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Chess Calculation Trainer", version=APP_VERSION, lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = EngineManager(settings)
+    app.state.db = Database(settings.data_dir / "app.sqlite")
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -75,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(error_body("INTERNAL_ERROR", "Erreur interne."), status_code=500)
 
     app.include_router(router)
+    app.include_router(library_router)
     _mount_static(app, settings.static_dir)
     return app
 

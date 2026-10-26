@@ -6,6 +6,7 @@ refuse les coups illegaux et les signale dans game.errors, que l'on remonte).
 from __future__ import annotations
 
 import io
+import uuid
 from dataclasses import dataclass, field
 
 import chess
@@ -25,6 +26,10 @@ class PgnNode:
     comment: str
     starting_comment: str
     nags: list[int]
+    # Numero du coup et camp qui le joue, lus sur l'echiquier (et non deduits du
+    # demi-coup : une partie avec en-tete FEN peut commencer aux Noirs, au coup 23).
+    move_number: int | None = None
+    color: str | None = None
     children: list[str] = field(default_factory=list)
 
 
@@ -46,15 +51,13 @@ class PgnImport:
 
 def _game_tree(game: chess.pgn.Game, index: int, budget: list[int]) -> PgnGame:
     nodes: dict[str, PgnNode] = {}
-    counter = 0
 
     def new_id() -> str:
-        nonlocal counter
-        counter += 1
         budget[0] -= 1
         if budget[0] < 0:
             raise TooLarge("PGN_TOO_MANY_NODES", "Le PGN contient trop de coups et variantes.")
-        return f"g{index}n{counter}"
+        # Identifiant definitif (UUID) : jamais reutilise entre les arbres.
+        return str(uuid.uuid4())
 
     root_board = game.board()
     root_id = new_id()
@@ -70,12 +73,15 @@ def _game_tree(game: chess.pgn.Game, index: int, budget: list[int]) -> PgnGame:
         for variation in node.variations:
             child_board = board.copy(stack=False)
             san = child_board.san(variation.move)
+            move_number = child_board.fullmove_number
+            color = "white" if child_board.turn == chess.WHITE else "black"
             child_board.push(variation.move)
             child_id = new_id()
             nodes[child_id] = PgnNode(
                 id=child_id, parent_id=node_id, ply=ply + 1, uci=variation.move.uci(), san=san,
                 fen=child_board.fen(), comment=variation.comment,
                 starting_comment=variation.starting_comment, nags=sorted(variation.nags),
+                move_number=move_number, color=color,
             )
             nodes[node_id].children.append(child_id)
             child_entries.append((variation, child_id, child_board, ply + 1))

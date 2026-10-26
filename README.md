@@ -9,6 +9,7 @@ Aucune promesse d'exhaustivite : jusqu'a 20 premiers coups, profondeur cible
 - Specification : `specs/Chess_Calculation_Trainer_D1-D7_GitHubActions_Installation_1Clic_v2.zip`
 - Arbitrages et ecarts a la spec : `docs/decisions.md`
 - Rapport du Lot 0 (versions reelles, API constatees, bench moteur) : `docs/lot0-report.md`
+- Rapport du Lot 1 (SQLite, migrations, instantanes de position) : `docs/lot1-report.md`
 
 Cible finale : Windows 11 x64 + Docker Desktop/WSL 2, image GHCR
 `linux/amd64` et installation par double-clic (Lot 6). **Ce VPS sert au
@@ -18,7 +19,7 @@ developpement et aux tests uniquement** : aucun port publie.
 
 | chemin | contenu |
 |---|---|
-| `backend/app/` | FastAPI : `api/`, `domain/` (FEN, PGN, coups), `engine/` (UCI, analyse, bench) |
+| `backend/app/` | FastAPI : `api/`, `domain/` (FEN, PGN, coups, instantanes), `engine/` (UCI, analyse, bench), `persistence/` (SQLite, migrations) |
 | `backend/tests/` | pytest, dont integration avec le vrai Stockfish |
 | `backend/Dockerfile` | multi-stage : `stockfish` (sf_19 universal), `frontend`, `pydeps`, `runtime`, `test`, `devtools` |
 | `frontend/` | React 19 + TypeScript + Vite ; `react-chessboard`, `react-arborist` via adaptateurs |

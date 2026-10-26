@@ -8,6 +8,7 @@ type Props = {
   rows: TreeRow[];
   selectedNodeId: string | null;
   onSelect: (nodeId: string) => void;
+  onLoadMore?: (nodeId: string) => void;
   height?: number;
 };
 
@@ -34,7 +35,7 @@ function Row({ node, style }: NodeRendererProps<TreeRow>) {
   );
 }
 
-export function VariationTree({ rows, selectedNodeId, onSelect, height = 360 }: Props) {
+export function VariationTree({ rows, selectedNodeId, onSelect, onLoadMore, height = 360 }: Props) {
   return (
     <Tree<TreeRow>
       data={rows}
@@ -50,7 +51,9 @@ export function VariationTree({ rows, selectedNodeId, onSelect, height = 360 }: 
       height={height}
       aria-label="Arbre des variantes"
       onActivate={(node) => {
-        if (node.data.nodeId) onSelect(node.data.nodeId);
+        if (!node.data.nodeId) return;
+        if (node.data.kind === 'more') onLoadMore?.(node.data.nodeId);
+        else onSelect(node.data.nodeId);
       }}
     >
       {Row}

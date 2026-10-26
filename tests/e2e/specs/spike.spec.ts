@@ -13,6 +13,10 @@ async function center(page: Page, selector: string) {
 
 /** Glisser-deposer souris, par petits pas (le capteur dnd-kit veut du mouvement). */
 async function drag(page: Page, from: string, to: string | { x: number; y: number }) {
+  // Laisser finir l'animation de position de react-chessboard (150 ms) : un
+  // glisser commence pendant l'animation est ignore.
+  if (from.includes('data-square')) await expect(page.locator(from).locator('[data-piece]')).toBeVisible();
+  await page.waitForTimeout(200);
   // La souris n'atteint que la zone visible : ramener la source a l'ecran.
   await page.locator(from).first().scrollIntoViewIfNeeded();
   const a = await center(page, from);
@@ -22,6 +26,10 @@ async function drag(page: Page, from: string, to: string | { x: number; y: numbe
   await page.mouse.move(a.x + 5, a.y + 5, { steps: 3 });
   await page.mouse.move(b.x, b.y, { steps: 12 });
   await page.mouse.up();
+  // dnd-kit bloque tout clic sur le document pendant 50 ms apres un depot
+  // (@dnd-kit/core, AbstractPointerSensor.detach) : imperceptible pour un humain,
+  // mais Playwright clique plus vite.
+  await page.waitForTimeout(100);
 }
 
 // Un seul echiquier visible par onglet.
@@ -34,7 +42,7 @@ async function loadFen(page: Page, fen: string) {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('spike Lot 0');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Chess Calculation Trainer');
 });
 
 test('echiquier rendu et moteur annonce', async ({ page }) => {
@@ -48,7 +56,7 @@ test('glisser e2-e4 : coup valide par le serveur, SAN calcule cote serveur', asy
   const played = page.waitForResponse((r) => r.url().endsWith('/api/v1/moves/play'));
   await drag(page, sq('e2'), sq('e4'));
   expect((await played).status()).toBe(200);
-  await expect(page.getByText('Ligne jouee : e4')).toBeVisible();
+  await expect(page.getByText('Coups joues depuis cette FEN : e4')).toBeVisible();
   await expect(page.locator('[data-square="e4"] [data-piece="wP"]')).toBeVisible();
   await expect(page.locator('[data-square="e2"] [data-piece]')).toHaveCount(0);
 });
@@ -67,7 +75,7 @@ test('promotion : choix explicite de la piece, jamais de dame implicite', async 
   const dialog = page.getByRole('dialog', { name: 'Choisir la piece de promotion' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Cavalier' }).click();
-  await expect(page.getByText('Ligne jouee : e8=N')).toBeVisible();
+  await expect(page.getByText('Coups joues depuis cette FEN : e8=N')).toBeVisible();
   await expect(page.locator('[data-square="e8"] [data-piece="wN"]')).toBeVisible();
 });
 
