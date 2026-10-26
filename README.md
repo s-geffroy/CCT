@@ -1,85 +1,51 @@
-# cct
+# Chess Calculation Trainer (cct)
 
-Worker heberge sur le VPS multi-applications : du travail de fond, **aucune
-surface HTTP**.
+Application locale d'entrainement au calcul des variantes d'echecs : on
+calcule (mentalement ou en construisant un arbre), puis on confronte ses
+variantes a un arbre de reference **selectif** produit par Stockfish 19.
+Aucune promesse d'exhaustivite : jusqu'a 20 premiers coups, profondeur cible
+21, budgets bornes.
 
-## Ou est le travail
+- Specification : `specs/Chess_Calculation_Trainer_D1-D7_GitHubActions_Installation_1Clic_v2.zip`
+- Arbitrages et ecarts a la spec : `docs/decisions.md`
+- Rapport du Lot 0 (versions reelles, API constatees, bench moteur) : `docs/lot0-report.md`
 
-`src/worker.py`, fonction `cycle()`. Tout le reste est la charpente :
+Cible finale : Windows 11 x64 + Docker Desktop/WSL 2, image GHCR
+`linux/amd64` et installation par double-clic (Lot 6). **Ce VPS sert au
+developpement et aux tests uniquement** : aucun port publie.
 
-| element | role |
+## Structure
+
+| chemin | contenu |
 |---|---|
-| boucle | rappelle `cycle()` toutes les `WORKER_INTERVAL` secondes |
-| battement | `/tmp/heartbeat`, touche a chaque tour, lu par le healthcheck |
-| arret propre | SIGTERM honore, sommeil fractionne, fin du cycle en cours |
-| `/state` | volume `cct_state`, ce qui doit survivre a un redemarrage |
+| `backend/app/` | FastAPI : `api/`, `domain/` (FEN, PGN, coups), `engine/` (UCI, analyse, bench) |
+| `backend/tests/` | pytest, dont integration avec le vrai Stockfish |
+| `backend/Dockerfile` | multi-stage : `stockfish` (sf_19 universal), `frontend`, `pydeps`, `runtime`, `test`, `devtools` |
+| `frontend/` | React 19 + TypeScript + Vite ; `react-chessboard`, `react-arborist` via adaptateurs |
+| `compose.yaml` | stack du VPS (`app`, `tests`, `devtools`) |
 
-## Cycle de developpement
+## Cycle de developpement (VPS)
 
-```bash
-sudo -iu cct
-cd /srv/apps/cct
-claude
-```
-
-Puis, apres modification :
+Rien ne s'execute sur l'hote : tout passe par `appctl`.
 
 ```bash
-tests/test_smoke.sh      # un cycle, un battement, un arret propre
+tests/test_smoke.sh                 # vitest/typecheck + pytest dans l'image
 sudo appctl validate
 sudo appctl rebuild
-sudo appctl status       # le conteneur doit passer 'healthy'
-sudo appctl logs -f      # c'est ici qu'on voit si le travail se fait
+sudo appctl status                  # le conteneur 'app' doit passer healthy
+sudo appctl logs                    # 'moteur demarre : Stockfish 19 ...'
 ```
 
-Un worker n'a pas d'URL a ouvrir : **les logs sont l'interface**. `status` dit
-que la boucle tourne, `logs` dit que le travail se fait. Les deux sont
-necessaires.
-
-## Reglages
-
-| variable | defaut | role |
-|---|---|---|
-| `WORKER_INTERVAL` | `30` | secondes entre deux cycles |
-| `WORKER_STATE` | `/state` | repertoire d'etat (volume persistant) |
-| `WORKER_HEARTBEAT` | `/tmp/heartbeat` | fichier de battement |
-
-Le seuil du healthcheck (180 s dans `compose.yaml`) doit rester superieur a
-deux fois `WORKER_INTERVAL`.
-
-## Exposition
-
-`app.yaml` le declare en `none` : le conteneur ne parle qu'au reseau interne de
-l'application. Pour ouvrir une page de metriques ou une sonde :
+Outils ponctuels :
 
 ```bash
-sudo /opt/infra/scripts/app-exposure.py cct --set worker=tailnet --port worker=9100
+# lockfiles (reseau sortant via cct-dev)
+sudo appctl run devtools sh -c 'cd backend && uv lock'
+sudo appctl run devtools sh -c 'cd frontend && npm install --package-lock-only'
+# banc d'essai Stockfish (budget en secondes par recherche)
+sudo appctl run tests python -m app.engine.bench --budget 120
 ```
 
-`app.yaml` et les labels Traefik sont mis a jour ensemble.
+## Licence
 
-## Secrets
-
-Les secrets reels vont dans `/etc/app-secrets/cct/` (root uniquement),
-jamais dans ce depot :
-
-```bash
-sudo appctl secret set api_key   # saisie masquee, pose en 0444
-```
-
-et dans `compose.yaml` :
-
-```yaml
-    secrets:
-      - api_key
-    environment:
-      API_KEY_FILE: /run/secrets/api_key
-
-secrets:
-  api_key:
-    file: /etc/app-secrets/cct/api_key
-```
-
-`0444` et non `0400` : le mode est reporte tel quel dans le conteneur, ou le
-worker tourne en utilisateur non privilegie. Sur l'hote, c'est le repertoire
-(0700 root) qui protege le secret.
+GPL-3.0-or-later (Stockfish et python-chess sont GPL ; voir `docs/decisions.md`).

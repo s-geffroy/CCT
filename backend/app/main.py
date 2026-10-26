@@ -1,0 +1,108 @@
+"""Application FastAPI : API /api/v1 + UI statique, un seul processus."""
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.staticfiles import StaticFiles
+
+from .api.routes import router
+from .domain.errors import DomainError
+from .engine.uci import EngineManager
+from .log import get_logger, setup_logging
+from .settings import APP_VERSION, Settings, get_settings
+
+log = get_logger("app")
+
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def error_body(code: str, message: str, details: dict | None = None) -> dict:
+    return {"error": {"code": code, "message": message, "details": details or {}}}
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        log.info("demarrage %s (donnees %s)", APP_VERSION, settings.data_dir)
+        if settings.engine_enabled:
+            await app.state.engine.start()
+        else:
+            log.warning("moteur desactive par configuration")
+        yield
+        await app.state.engine.stop()
+        log.info("arret")
+
+    app = FastAPI(title="Chess Calculation Trainer", version=APP_VERSION, lifespan=lifespan)
+    app.state.settings = settings
+    app.state.engine = EngineManager(settings)
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        # Un site tiers ouvert dans le navigateur peut viser 127.0.0.1 : toute
+        # mutation portant une Origin etrangere est refusee.
+        if request.method in UNSAFE_METHODS:
+            origin = request.headers.get("origin")
+            if origin is not None and origin not in _allowed_origins(request, settings):
+                return JSONResponse(error_body("FORBIDDEN_ORIGIN", "Origine non autorisee."), status_code=403)
+            length = request.headers.get("content-length")
+            if length is not None and length.isdigit() and int(length) > settings.max_pgn_bytes + 64 * 1024:
+                return JSONResponse(error_body("BODY_TOO_LARGE", "Requete trop volumineuse."), status_code=413)
+        return await call_next(request)
+
+    # Ajoute apres `guard` : s'execute donc avant lui (protection DNS rebinding).
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+
+    @app.exception_handler(DomainError)
+    async def domain_error(_request: Request, exc: DomainError):
+        return JSONResponse(error_body(exc.code, exc.message, exc.details), status_code=exc.status_code)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(_request: Request, exc: RequestValidationError):
+        fields = [{"loc": [str(p) for p in e.get("loc", [])], "msg": e.get("msg", "")} for e in exc.errors()]
+        return JSONResponse(error_body("VALIDATION_ERROR", "Requete invalide.", {"fields": fields}), status_code=422)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        # Le detail va au journal, jamais dans la reponse.
+        log.exception("erreur interne sur %s %s", request.method, request.url.path)
+        return JSONResponse(error_body("INTERNAL_ERROR", "Erreur interne."), status_code=500)
+
+    app.include_router(router)
+    _mount_static(app, settings.static_dir)
+    return app
+
+
+def _allowed_origins(request: Request, settings: Settings) -> set[str]:
+    # L'origine de la page elle-meme (meme hote/port) est toujours acceptee.
+    own = f"{request.url.scheme}://{request.headers.get('host', '')}"
+    return {own, *settings.allowed_origins}
+
+
+def _mount_static(app: FastAPI, static_dir: Path) -> None:
+    index = static_dir / "index.html"
+    if not index.is_file():
+        log.warning("UI absente (%s) : API seule", static_dir)
+        return
+    assets = static_dir / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str):
+        if path.startswith("api/"):
+            return JSONResponse(error_body("NOT_FOUND", "Ressource inconnue."), status_code=404)
+        candidate = (static_dir / path).resolve()
+        if path and candidate.is_file() and candidate.is_relative_to(static_dir.resolve()):
+            return FileResponse(candidate)
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+
+
+setup_logging()
+app = create_app()

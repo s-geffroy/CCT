@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Test minimal : le worker fait-il un cycle, pose-t-il son battement, et
-# s'arrete-t-il sur SIGTERM ?
+# Tests de bout en bout sur le VPS, sans rien executer sur l'hote :
+#   1. typecheck + vitest du frontend (conteneur devtools, depot monte) ;
+#   2. pytest dans l'image finale + Stockfish reel (service tests).
+# Le build de l'image rejoue aussi typecheck/vitest : un echec casse le build.
 set -euo pipefail
 
-here=$(cd "$(dirname "$0")" && pwd)
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+cd "$(dirname "$0")/.."
 
-WORKER_INTERVAL=1 WORKER_STATE="$tmp/state" WORKER_HEARTBEAT="$tmp/beat" \
-  timeout --signal=TERM 3 python3 "$here/../src/worker.py" > "$tmp/out" 2>&1 || true
+echo "== frontend : typecheck + vitest"
+sudo appctl run devtools sh -c 'cd frontend && npm ci --no-audit --no-fund --loglevel=error && npm run typecheck && npm test'
 
-test -f "$tmp/beat"          || { echo "ECHEC : pas de battement"; exit 1; }
-test -f "$tmp/state/cycles"  || { echo "ECHEC : aucun cycle effectue"; exit 1; }
-grep -q "arrete" "$tmp/out"  || { echo "ECHEC : arret non propre"; cat "$tmp/out"; exit 1; }
-echo "OK : cycle effectue, battement pose, arret propre"
+echo "== backend : pytest dans l'image (Stockfish reel)"
+sudo appctl run tests
+
+echo "OK : frontend et backend verts"

@@ -1,45 +1,103 @@
-# Un worker : du travail de fond, aucune surface HTTP. Donc pas de labels
-# Traefik, pas de reseau edge, et 'exposure: none' dans app.yaml -- appctl
-# refuse l'un sans l'autre.
+# Stack du VPS : developpement et tests uniquement (docs/decisions.md).
+# L'application ne sert personne ici : aucun port publie, aucun label Traefik,
+# 'exposure: none' dans app.yaml. Le compose de production Windows vit dans
+# packaging/windows/compose.yaml.
 services:
-  worker:
+  app:
     build:
-      context: ./src
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
     restart: unless-stopped
     networks:
       - internal
     environment:
-      APP_NAME: cct
       TZ: Europe/Paris
-      WORKER_INTERVAL: "30"
+      APP_MODE: development
+      # Le Host n'est verifie qu'au sens loopback : sur le VPS, seuls la
+      # sonde interne et les tests parlent a l'API.
+      ENGINE_THREADS: "2"
+      ENGINE_HASH_MB: "128"
     volumes:
-      - state:/state
+      - data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 256M
-          pids: 128
+          cpus: "2.0"
+          memory: 1G
+          pids: 256
     healthcheck:
-      # Le worker touche /tmp/heartbeat a chaque tour : le conteneur est sain
-      # tant que ce fichier est recent. Le seuil doit rester superieur a deux
-      # fois WORKER_INTERVAL. 'Sain' veut dire "la boucle tourne", pas "le
-      # travail reussit" -- ca, ce sont les logs qui le disent.
-      # Les '$$' sont des '$' : Docker Compose interprete un '$' seul.
-      test: ["CMD", "sh", "-c", "[ $$(( $$(date +%s) - $$(stat -c %Y /tmp/heartbeat) )) -lt 180 ]"]
+      # 'live' : le processus repond. Le moteur est rapporte par /ready, sans
+      # rendre le conteneur malade (les modes B/C marchent sans moteur).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
-    # 'docker stop' laisse 10 s avant le SIGKILL. Le worker s'arrete a la fin du
-    # cycle en cours : si un cycle peut durer plus longtemps, augmenter ici.
-    stop_grace_period: 30s
+    stop_grace_period: 15s
+
+  # Tests backend dans l'image finale + dependances de test :
+  #   sudo appctl run tests
+  #   sudo appctl run tests python -m app.engine.bench
+  tests:
+    profiles: [cli]
+    # Reconstruit a chaque 'appctl run tests' : on teste toujours le code courant.
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: test
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+          pids: 256
+
+  # Outils de dev (Node, Python, uv) sur le depot monte, pour generer et mettre
+  # a jour les lockfiles sans rien installer sur l'hote :
+  #   sudo appctl run devtools sh -c 'cd backend && uv lock'
+  # Reseau 'dev' : il faut Internet pour joindre les registres.
+  devtools:
+    profiles: [cli]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: devtools
+    user: "1022:1023"
+    networks:
+      - dev
+    volumes:
+      - ./:/work
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+          pids: 512
 
 networks:
   internal:
     name: cct-internal
     external: true
+  # Reseau sortant pour devtools seulement (registres npm / PyPI).
+  dev:
+    name: cct-dev
 
 volumes:
-  state:
-    name: cct_state
+  data:
+    name: cct_data

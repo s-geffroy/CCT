@@ -6,5 +6,5 @@
 name: cct
 
 services:
-  worker:
+  app:
     exposure: none

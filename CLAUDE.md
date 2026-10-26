@@ -3,45 +3,57 @@
 Ce fichier est lu par Claude Code au demarrage. Il fixe les regles non
 negociables de ce projet sur ce VPS.
 
-## Ce projet n'expose rien
+## Ce projet n'expose rien (sur ce VPS)
 
-C'est un worker : du travail de fond, aucune surface HTTP. Pas de labels
+Le produit est une application web locale pour Windows (FastAPI + UI React +
+Stockfish, voir `specs/` et `docs/decisions.md`). **Sur ce VPS, il ne sert
+qu'au developpement et aux tests** : aucun port publie, pas de labels
 Traefik, pas de reseau edge, `exposure: none` dans `app.yaml` -- et appctl
 refuse l'un sans l'autre.
 
-Il n'y a donc pas d'URL a tester en fin de tache. Ce qui tient lieu
-d'interface, ce sont **les logs** et **l'etat de sante** du conteneur.
+Il n'y a donc pas d'URL a ouvrir en fin de tache. Ce qui tient lieu
+d'interface : **les tests** (`appctl run tests`), **les logs** et **l'etat de
+sante** du conteneur.
 
-Si le worker doit un jour repondre a quelque chose (une page de metriques, une
-sonde), ca se declare : `sudo /opt/infra/scripts/app-exposure.py cct --set
-worker=tailnet --port worker=<port>`, qui met `app.yaml` et les labels a jour
-ensemble. Ne bricole jamais les labels a la main.
+Si l'application doit un jour etre joignable (tailnet), ca se declare :
+`sudo /opt/infra/scripts/app-exposure.py cct --set app=tailnet --port
+app=8000`, qui met `app.yaml` et les labels a jour ensemble. Ne bricole jamais
+les labels a la main.
 
-## La boucle
+## Le serveur
 
-- `src/worker.py` porte la charpente : boucle, battement de coeur, arret
-  propre. Le travail va dans `cycle()`. Garde le reste.
-- **Un cycle qui echoue ne doit pas tuer le worker** : il rate son tour, journalise
-  l'erreur, et reessaie au suivant. Ce qui ne doit jamais etre avale, c'est le
-  message d'erreur.
-- **Un cycle doit etre reprenable** : il peut etre interrompu a tout moment
-  (redemarrage, SIGTERM, plantage). Ecris l'avancement au fur et a mesure dans
-  `/state`, pas a la fin.
-- **SIGTERM s'honore.** `docker stop` laisse `stop_grace_period` avant le
-  SIGKILL. Le sommeil est fractionne pour ca : ne le remplace pas par un
-  `time.sleep(INTERVAL)` d'un bloc.
-- Le battement (`/tmp/heartbeat`) dit "la boucle tourne", pas "le travail
-  reussit". Si le seuil du healthcheck change, il doit rester superieur a deux
-  fois `WORKER_INTERVAL`.
+- Un seul processus Uvicorn (`--workers 1`) : le planificateur Stockfish vit
+  dans ce processus. Ne jamais en lancer plusieurs.
+- Un seul processus Stockfish, jamais partage sans `EngineManager.lock`.
+- **Une panne moteur ne tue pas le serveur** : `/api/v1/health/live` reste vert,
+  `/api/v1/health/ready` passe en 503. Les modes B/C marchent sans moteur.
+- Le healthcheck Docker lit `/live` (le processus repond), pas `/ready`.
+- **SIGTERM s'honore** : l'arret passe par le `lifespan` FastAPI, qui quitte
+  Stockfish proprement dans `stop_grace_period`.
+- Aucune donnee moteur (coup, score, PV, rang) ne sort par l'API ou le SSE
+  d'une seance non revelee : le filtrage est cote serveur, et teste.
+
+## Services Compose
+
+| service | role | lancement |
+|---|---|---|
+| `app` | l'image livree (`runtime`) | `sudo appctl rebuild` |
+| `tests` | image `test` : pytest dans l'image finale | `sudo appctl run tests` |
+| `devtools` | Node + Python + uv sur le depot monte, reseau `cct-dev` | `sudo appctl run devtools sh -c '...'` |
+
+`devtools` sert a generer les lockfiles et a lancer typecheck/vitest ; rien ne
+s'execute sur l'hote, meme si `node` ou `python3` y sont presents.
 
 ## Logs
 
-- Tout part sur la sortie standard, **non bufferise** (`flush=True`, et `-u`
-  dans le Dockerfile). Sans ca, `appctl logs` ne montre rien pendant des
-  minutes, et on croit le worker bloque.
+- Tout part sur la sortie standard, **non bufferise** (`PYTHONUNBUFFERED=1`
+  dans le Dockerfile, journal configure par `app/log.py`). Sans ca,
+  `appctl logs` ne montre rien pendant des minutes, et on croit le serveur
+  bloque.
 - Une ligne par evenement, horodatee. Pas de secret, pas de donnee personnelle.
-- Le volume de logs est une ressource : ne journalise pas a chaque iteration
-  d'une boucle interne, journalise les cycles et les erreurs.
+- Le volume de logs est une ressource : pas de journal d'acces Uvicorn
+  (`--no-access-log`), pas de ligne par `info` UCI ; journalise les
+  recherches (debut, paliers, fin) et les erreurs.
 
 ## Execution
 
@@ -92,16 +104,18 @@ ensemble. Ne bricole jamais les labels a la main.
 ## Donnees
 
 - Les donnees persistantes vont dans des named volumes, nommes `cct_<usage>`.
-  Celui de depart s'appelle `cct_state` et est monte sur `/state`.
+  L'application utilise `cct_data`, monte sur `/data` (SQLite). L'ancien
+  `cct_state` du squelette n'est plus monte ; il n'est pas supprime.
 - Ne supprime jamais un volume sans demande explicite.
 - N'execute jamais `docker volume prune`.
 
 ## Fin de tache
 
-1. `tests/test_smoke.sh` et les tests pertinents ;
+1. `tests/test_smoke.sh` (pytest dans l'image + typecheck/vitest) et les tests
+   pertinents ;
 2. `sudo appctl validate` ;
 3. `sudo appctl rebuild` si necessaire ;
 4. `sudo appctl status` -- le conteneur doit finir `healthy` ;
-5. `sudo appctl logs` -- verifier qu'un cycle passe reellement, pas seulement
-   que le conteneur tourne ;
+5. `sudo appctl logs` -- verifier que le moteur a demarre (`moteur demarre :
+   Stockfish 19`), pas seulement que le conteneur tourne ;
 6. signaler tout echec restant sans le masquer.
