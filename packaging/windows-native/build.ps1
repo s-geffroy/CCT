@@ -67,8 +67,9 @@ Copy-Item -LiteralPath $FrontendDist -Destination (Join-Path $backend 'static') 
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE'), (Join-Path $repo 'THIRD_PARTY_NOTICES.md') -Destination $payload
 # Bytecode precompile : premier demarrage plus rapide, rien a ecrire dans le dossier du programme.
 Invoke-Checked $exe @('-m', 'compileall', '-q', '-j', '0', $backend, (Join-Path $payload 'site-packages'))
-# L'application se charge-t-elle avec ce Python et ces dependances ?
-Invoke-Checked $exe @('-c', 'import app.desktop, app.main, chess.engine, pydantic_core; print("import ok")')
+# L'application se charge-t-elle avec ce Python et ces dependances ? (pas de
+# guillemets doubles : Windows PowerShell 5.1 les retire des arguments natifs)
+Invoke-Checked $exe @('-c', 'import app.desktop, app.main, chess.engine, pydantic_core; print(''import ok'')')
 
 Write-Host '==> Inno Setup'
 function Find-Iscc { Get-ChildItem -Path (Join-Path ${env:ProgramFiles} 'Inno Setup 7*\ISCC.exe') -ErrorAction SilentlyContinue | Select-Object -First 1 }
