@@ -63,6 +63,8 @@ class Settings:
     tree_node_depth: int = field(default_factory=lambda: _int_env("TREE_NODE_DEPTH", 21, 8, 32))
     tree_node_budget_s: int = field(default_factory=lambda: _int_env("TREE_NODE_BUDGET_S", 30, 5, 600))
     tree_auto_max_ply: int = field(default_factory=lambda: _int_env("TREE_AUTO_MAX_PLY", 4, 0, 12))
+    # Lanceur de bureau (Lot 7) : jeton de la route d'arret ; None hors lanceur (Docker).
+    desktop_token: str | None = None
 
 
 def get_settings() -> Settings:

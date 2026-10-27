@@ -13,6 +13,7 @@ from starlette.staticfiles import StaticFiles
 from . import backup
 from .api.analysis import router as analysis_router
 from .api.engine import router as engine_router
+from .api.desktop import router as desktop_router
 from .api.library import router as library_router
 from .api.reference import router as reference_router
 from .api.settings import router as settings_router
@@ -120,6 +121,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(reference_router)
     app.include_router(settings_router)
     app.include_router(engine_router)
+    if settings.desktop_token:
+        app.include_router(desktop_router)
     _mount_static(app, settings.static_dir)
     return app
 
@@ -149,5 +152,17 @@ def _mount_static(app: FastAPI, static_dir: Path) -> None:
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
-setup_logging()
-app = create_app()
+_app: FastAPI | None = None
+
+
+def __getattr__(name: str):
+    """`app.main:app` (image Docker) : construit a la premiere demande, pas a
+    l'import, pour que le lanceur de bureau (`app.desktop`) importe ce module
+    sans creer d'application sur les reglages par defaut (`/data`)."""
+    global _app
+    if name == "app":
+        if _app is None:
+            setup_logging()
+            _app = create_app()
+        return _app
+    raise AttributeError(name)
