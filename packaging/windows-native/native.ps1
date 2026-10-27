@@ -12,6 +12,10 @@ $script:Pinned = @{
     PipSha256     = '71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e'
     InnoUrl       = 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe'
     InnoSha256    = '0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f'
+    # python-chess n'est publie qu'en sources (pur Python) : archive extraite, sans compilation.
+    ChessVersion  = '1.11.2'
+    ChessUrl      = 'https://files.pythonhosted.org/packages/93/09/7d04d7581ae3bb8b598017941781bceb7959dd1b13e3ebf7b6a2cd843bc9/chess-1.11.2.tar.gz'
+    ChessSha256   = 'a8b43e5678fdb3000695bdaa573117ad683761e5ca38e591c4826eba6d25bb39'
 }
 
 function Test-Sha256([string] $Path, [string] $Expected) {
@@ -75,4 +79,33 @@ function Wait-Condition([scriptblock] $Condition, [int] $TimeoutSeconds, [string
         Start-Sleep -Milliseconds 500
     }
     throw ('Delai depasse (' + $TimeoutSeconds + ' s) : ' + $What)
+}
+
+# Blocs de requirements.txt (exigence + lignes de suite), par nom de paquet.
+function Get-RequirementBlocks([string] $Path) {
+    $blocks = [ordered]@{}
+    $current = $null
+    foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+        if ($line -match '^([A-Za-z0-9][A-Za-z0-9._-]*)==') { $current = $Matches[1].ToLowerInvariant(); $blocks[$current] = @($line) }
+        elseif ($current -and $line -match '^\s') { $blocks[$current] += $line }
+        else { $current = $null }
+    }
+    return $blocks
+}
+
+function Get-RequirementHash([string] $Path, [string] $Name) {
+    $block = (Get-RequirementBlocks $Path)[$Name.ToLowerInvariant()]
+    if (-not $block) { return $null }
+    $m = [regex]::Match(($block -join ' '), '--hash=sha256:([0-9a-f]{64})')
+    if ($m.Success) { return $m.Groups[1].Value }
+    return $null
+}
+
+# requirements.txt sans les paquets cites (installes autrement), ecrit dans $Destination.
+function Write-RequirementsWithout([string] $Path, [string[]] $Names, [string] $Destination) {
+    $skip = @($Names | ForEach-Object { $_.ToLowerInvariant() })
+    $lines = @()
+    $blocks = Get-RequirementBlocks $Path
+    foreach ($name in $blocks.Keys) { if ($skip -notcontains $name) { $lines += $blocks[$name] } }
+    [System.IO.File]::WriteAllLines($Destination, [string[]]$lines)
 }

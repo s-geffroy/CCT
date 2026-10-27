@@ -77,3 +77,18 @@ Describe 'Wait-Condition' {
         { Wait-Condition { $false } 1 'rien' } | Should -Throw '*rien*'
     }
 }
+
+Describe 'Exigences installees hors wheels' {
+    It 'python-chess epingle avec la meme empreinte que uv.lock' {
+        $req = Join-Path (Split-Path -Parent $PSScriptRoot) 'requirements.txt'
+        Get-RequirementHash $req 'chess' | Should -Be $Pinned.ChessSha256
+        $Pinned.ChessUrl | Should -Match ('chess-' + [regex]::Escape($Pinned.ChessVersion) + '\.tar\.gz$')
+    }
+    It 'retire un paquet avec ses lignes de suite, garde les autres' {
+        $f = Join-Path $TestDrive 'r.txt'
+        $out = Join-Path $TestDrive 'w.txt'
+        Set-Content -LiteralPath $f -Value @('# entete', 'a==1 \', '    --hash=sha256:1', '    # via x', 'Chess==2 \', '    --hash=sha256:2', 'b==3 \', '    --hash=sha256:3')
+        Write-RequirementsWithout $f @('chess') $out
+        (Get-Content -LiteralPath $out) -join '|' | Should -Be 'a==1 \|    --hash=sha256:1|    # via x|b==3 \|    --hash=sha256:3'
+    }
+}

@@ -37,12 +37,24 @@ $exe = Join-Path $python 'python.exe'
 Write-Host '==> Dependances (wheels win_amd64, empreintes exigees)'
 $requirements = Join-Path $PSScriptRoot 'requirements.txt'
 if (-not (Test-HashedRequirements $requirements)) { throw 'requirements.txt : une exigence sans empreinte' }
+if ((Get-RequirementHash $requirements 'chess') -ne $Pinned.ChessSha256) { throw 'python-chess : empreinte epinglee differente de uv.lock' }
+$wheels = Join-Path $Work 'requirements-wheels.txt'
+Write-RequirementsWithout $requirements @('chess') $wheels
 $pip = Get-VerifiedDownload $Pinned.PipUrl $Pinned.PipSha256 (Join-Path $downloads 'pip.whl')
 # pip ne sert qu'a la construction : present dans le ._pth le temps de l'installation.
 [System.IO.File]::WriteAllLines($pth, [string[]](Get-PthLines $Pinned.PythonVersion @($pip)))
 Invoke-Checked $exe @('-m', 'pip', 'install', '--no-deps', '--require-hashes', '--only-binary=:all:',
-    '--no-input', '--disable-pip-version-check', '--target', (Join-Path $payload 'site-packages'), '-r', $requirements)
+    '--no-input', '--disable-pip-version-check', '--target', (Join-Path $payload 'site-packages'), '-r', $wheels)
 [System.IO.File]::WriteAllLines($pth, [string[]](Get-PthLines $Pinned.PythonVersion))
+# python-chess : pur Python, publie en sources seulement ; on extrait le paquet.
+$sdist = Get-VerifiedDownload $Pinned.ChessUrl $Pinned.ChessSha256 (Join-Path $downloads 'chess.tar.gz')
+$unpacked = Join-Path $Work 'chess-src'
+if (Test-Path -LiteralPath $unpacked) { Remove-Item -LiteralPath $unpacked -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $unpacked | Out-Null
+Invoke-Checked 'tar.exe' @('-xzf', $sdist, '-C', $unpacked)
+$chessRoot = Join-Path $unpacked ('chess-' + $Pinned.ChessVersion)
+Copy-Item -LiteralPath (Join-Path $chessRoot 'chess') -Destination (Join-Path $payload 'site-packages') -Recurse
+Copy-Item -LiteralPath (Join-Path $chessRoot 'LICENSE.txt') -Destination (Join-Path $payload 'site-packages\chess\LICENSE.txt') -ErrorAction SilentlyContinue
 
 Write-Host '==> Application et interface'
 $backend = Join-Path $payload 'backend'
@@ -56,7 +68,7 @@ Copy-Item -LiteralPath (Join-Path $repo 'LICENSE'), (Join-Path $repo 'THIRD_PART
 # Bytecode precompile : premier demarrage plus rapide, rien a ecrire dans le dossier du programme.
 Invoke-Checked $exe @('-m', 'compileall', '-q', '-j', '0', $backend, (Join-Path $payload 'site-packages'))
 # L'application se charge-t-elle avec ce Python et ces dependances ?
-Invoke-Checked $exe @('-c', 'import app.desktop, app.main, pydantic_core; print("import ok")')
+Invoke-Checked $exe @('-c', 'import app.desktop, app.main, chess.engine, pydantic_core; print("import ok")')
 
 Write-Host '==> Inno Setup'
 function Find-Iscc { Get-ChildItem -Path (Join-Path ${env:ProgramFiles} 'Inno Setup 7*\ISCC.exe') -ErrorAction SilentlyContinue | Select-Object -First 1 }
