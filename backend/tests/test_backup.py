@@ -76,3 +76,9 @@ def test_cli(settings, monkeypatch, capsys):
     assert '"ok": true' in capsys.readouterr().out
     assert backup.main(["verify", str(settings.data_dir / "nope")]) == 1
     assert backup.main([]) == 2
+
+
+def test_nothing_to_back_up_is_not_an_error(tmp_path):
+    # Mise a jour d'une installation jamais utilisee : elle doit pouvoir continuer.
+    assert backup.create(tmp_path) == {"ok": True, "skipped": True, "reason": "aucune base : rien a sauvegarder",
+                                       "sessions": 0}

@@ -21,7 +21,8 @@ try {
 
     Write-Step 'Sauvegarde de vos donnees avant la mise a jour'
     $saved = Invoke-AppBackup $appRoot
-    Write-Host ('  ' + (Protect-Text $saved.Path) + ' (' + $saved.Sessions + ' seance(s))')
+    if ($saved.Path) { Write-Host ('  ' + (Protect-Text $saved.Path) + ' (' + $saved.Sessions + ' seance(s))') }
+    else { Write-Host '  Aucune donnee pour l instant : rien a sauvegarder.' }
 
     Write-Step ('Passage a ' + $manifest.app_version)
     $previousManifest = Join-Path $appRoot 'release-manifest.json'
@@ -33,6 +34,11 @@ try {
     $pulled = ($LASTEXITCODE -eq 0)
     if ($pulled) { Invoke-Compose $appRoot @('up', '-d') | Out-Null }
     if ($pulled -and (Wait-App $url 240) -ne 'down') {
+        # Raccourci absent (premiere installation interrompue, par exemple) : on le cree.
+        $link = Get-ShortcutPath
+        if ($link -and -not (Test-Path -LiteralPath $link)) {
+            try { New-DesktopShortcut $appRoot } catch { Write-Warning ('Raccourci bureau non cree : ' + $_.Exception.Message) }
+        }
         Write-Host ('Mise a jour terminee : ' + $manifest.app_version + '. Sauvegarde precedente conservee.')
         Start-Process $url
         exit 0
@@ -42,7 +48,7 @@ try {
     if (-not $pulled) { Write-Host (Protect-Text (($pull | Out-String).Trim())) } else { Show-AppLogs $appRoot }
     $values['IMAGE_REF'] = $oldRef
     Write-EnvFile $envFile $values
-    Invoke-AppRestore $appRoot $saved.Path
+    if ($saved.Path) { Invoke-AppRestore $appRoot $saved.Path } else { Invoke-Compose $appRoot @('up', '-d') | Out-Null }
     if ((Wait-App $url 180) -eq 'down') {
         throw ('Retour arriere incomplet. Vos donnees sont dans ' + (Protect-Text $saved.Path) +
                ' : envoyez le rapport de COLLECTER_DIAGNOSTIC.cmd avant toute autre action.')
