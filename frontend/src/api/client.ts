@@ -156,11 +156,18 @@ export type Session = {
   can_undo: boolean;
   can_redo: boolean;
   attempt: Attempt | null;
-  preparation?: { job_id: string; progress_category: string; is_ready: boolean };
+  preparation?: { job_id: string; progress_category: string; is_ready: boolean; tree_is_ready?: boolean; tree_progress_category?: string };
   reference?: { status: 'available'; job: AnalysisJob } | { status: 'not_available'; message: string };
+  reference_tree?: ReferenceTree;
 };
 
-export type EngineScore = { kind: 'cp' | 'mate' | 'unknown'; value: number | null; perspective: 'white'; bound: 'lower' | 'upper' | null };
+export type EngineScore = {
+  kind: 'cp' | 'mate' | 'draw' | 'unknown';
+  value: number | null;
+  perspective: 'white';
+  bound: 'lower' | 'upper' | null;
+  result?: '1-0' | '0-1' | '1/2-1/2';  // position terminale
+};
 
 export type AnalysisLine = {
   rank: number;
@@ -203,6 +210,103 @@ export type AnalysisJob = VisibleJob | HiddenJob;
 
 export const FINAL_JOB_STATES: JobState[] = ['complete_depth', 'budget_exhausted', 'incomplete', 'cancelled', 'failed', 'interrupted', 'terminal'];
 
+
+export type NodeStatus = 'queued' | 'provisional' | 'depth_met' | 'budget_exhausted' | 'incomplete' | 'failed' | 'pruned_by_policy' | 'terminal';
+export type SelectionReason = 'root' | 'top_rank' | 'opponent_best_defense' | 'opponent_alternative' | 'user_branch' | 'user_requested_reanalysis';
+
+export type ReferenceNode = {
+  id: string;
+  parent_id: string | null;
+  path_uci: string[];
+  ply: number;
+  move_uci: string | null;
+  move_san: string | null;
+  fen: string;
+  status: NodeStatus;
+  selection_reason: SelectionReason;
+  reanalysed: boolean;
+  job_id: string | null;
+  job_state: JobState | null;
+  target_depth: number | null;
+  legal_moves: number | null;
+  lines: AnalysisLine[];
+};
+
+export type TreeState = 'building' | 'complete' | 'budget_exhausted' | 'node_limit' | 'failed';
+
+export type VisibleTree = {
+  id: string;
+  visibility: 'full';
+  position_id: string;
+  session_id: string | null;
+  state: TreeState;
+  revision: number;
+  settings: { budget_s: number; max_nodes: number; max_children: number; node_depth: number; auto_max_ply: number };
+  spent_s: { auto: number; user: number };
+  pruned_count: number;
+  coverage: 'selective';
+  nodes: ReferenceNode[];
+  reused?: boolean;
+};
+
+export type HiddenTree = { id: string; visibility: 'hidden'; progress_category: string; is_ready: boolean };
+export type ReferenceTree = VisibleTree | HiddenTree;
+
+export type DiagnosticCategory =
+  | 'candidate_found' | 'candidate_omitted' | 'critical_defense_omitted' | 'illegal_continuation'
+  | 'evaluation_mismatch' | 'acceptable_alternative' | 'tactical_refutation' | 'unverified' | 'no_trace';
+
+export type Diagnostic = {
+  category: DiagnosticCategory;
+  verdict: string;
+  explanation: string;
+  certainty: 'certain' | 'verified' | 'uncertain' | 'undetermined';
+  evidence: Record<string, unknown>;
+  user_node_id: string | null;
+  reference_node_id: string | null;
+};
+
+export type NodeVerdict = {
+  path_uci: string[];
+  own_move: boolean;
+  verdict: 'concordant' | 'acceptable' | 'refuted' | 'unverified' | 'best_defense' | 'plausible_reply' | 'weaker_reply';
+  reason?: string;
+  score?: EngineScore;
+  depth?: number;
+  best_move_san?: string | null;
+  best_score?: EngineScore;
+  transposition_of?: string[];
+};
+
+export type ReviewQuality = 'final' | 'provisional' | 'insufficient';
+
+export type Review =
+  | { session_id: string; status: 'hidden'; message: string }
+  | {
+      session_id: string;
+      status: 'available';
+      stored: boolean;
+      review_id: string | null;
+      tree_state: TreeState | null;
+      quality: ReviewQuality;
+      quality_notes: string[];
+      policy: Record<string, number>;
+      dimensions: {
+        coverage: { status: 'determined' | 'undetermined'; found: number | null; known_relevant: number | null; user_candidates: string[]; relevant?: string[] } | null;
+        anticipation: { found: number; missed: number; unverified: number } | null;
+        accuracy: { legal_moves: number; moves_total: number; lines_total: number; lines_refuted: number; lines_without_refutation: number; lines_unverified: number } | null;
+        horizon: { lines: number; max_plies: number; median_plies: number } | null;
+        evaluation: { concordant: number; mismatch: number; not_comparable: number } | null;
+      };
+      diagnostics: Diagnostic[];
+      node_verdicts: Record<string, NodeVerdict>;
+    };
+
+export type TreeSettingsIn = {
+  target_depth: number; multipv_max: number; budget_s: number;
+  tree_budget_s?: number; max_nodes?: number; max_children?: number; node_depth?: number;
+};
+
 export type HistoryItem = {
   id: string;
   mode: 'mental' | 'tree';
@@ -213,6 +317,7 @@ export type HistoryItem = {
   duration_ms: number | null;
   position_id: string;
   fen: string;
+  review_quality: ReviewQuality | null;
 };
 
 const send = <T>(method: string, path: string, payload?: unknown) =>
@@ -254,4 +359,11 @@ export const api = {
   jobs: (positionId: string) => request<{ items: AnalysisJob[] }>(`/api/v1/analysis-jobs?position_id=${positionId}`),
   cancelJob: (id: string) => post<AnalysisJob>(`/api/v1/analysis-jobs/${id}/cancel`, {}),
   history: (limit = 50) => request<Page<HistoryItem>>(`/api/v1/history?limit=${limit}`),
+  review: (sessionId: string) => request<Review>(`/api/v1/sessions/${sessionId}/review`),
+  createTree: (position_id: string, settings: TreeSettingsIn) =>
+    post<ReferenceTree>('/api/v1/reference-trees', { position_id, ...settings }),
+  referenceTree: (id: string) => request<ReferenceTree>(`/api/v1/reference-trees/${id}`),
+  referenceTrees: (positionId: string) => request<{ items: ReferenceTree[] }>(`/api/v1/reference-trees?position_id=${positionId}`),
+  expand: (treeId: string, path_uci: string[]) =>
+    post<ReferenceTree>(`/api/v1/reference-trees/${treeId}/expand`, { path_uci }),
 };

@@ -15,12 +15,16 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import Field
 
+from ..domain import review as review_domain
 from ..domain import training
 from ..domain.errors import DomainError
 from ..log import get_logger
-from ..persistence import analysis_repo, repo, sessions_repo
+from ..domain.scores import terminal_score
+from ..persistence import analysis_repo, reference_repo, repo, review_repo, sessions_repo
 from ..persistence.db import utc_now
-from .analysis import PRIORITY_SESSION_REFERENCE, default_settings, enqueue, job_view
+from ..services import PRIORITY_SESSION_REFERENCE, default_settings
+from .analysis import enqueue, job_view
+from .reference import tree_view, tree_visible
 from .schemas import StrictModel
 
 router = APIRouter(prefix="/api/v1")
@@ -111,11 +115,17 @@ def session_view(conn: sqlite3.Connection, row: sqlite3.Row, scheduler=None) -> 
                                  "message": "Aucune analyse moteur : moteur indisponible lors de la seance."}
         else:
             view["reference"] = {"status": "available", "job": job_view(conn, scheduler, job)}
+        if row["reference_tree_id"]:
+            view["reference_tree"] = tree_view(conn, scheduler, reference_repo.get_tree(conn, row["reference_tree_id"]))
     elif job is not None:
         # Avant revelation : l'avancement seulement.
         hidden = analysis_repo.hidden_view(job)
         view["preparation"] = {"job_id": job["id"], "progress_category": hidden["progress_category"],
                                "is_ready": hidden["is_ready"]}
+        if row["reference_tree_id"]:
+            tree = reference_repo.hidden_view(reference_repo.get_tree(conn, row["reference_tree_id"]))
+            view["preparation"]["tree_is_ready"] = tree["is_ready"]
+            view["preparation"]["tree_progress_category"] = tree["progress_category"]
     return view
 
 
@@ -137,12 +147,15 @@ def _start_reference(request: Request, conn: sqlite3.Connection, row: sqlite3.Ro
     try:
         job, _ = enqueue(request, conn, position_id=row["position_id"], session_id=row["id"],
                          purpose="initial_reference", priority=PRIORITY_SESSION_REFERENCE,
-                         settings=default_settings())
+                         settings=default_settings(request.app.state.settings))
     except DomainError as exc:
         # Pas de reference (position terminale, file pleine...) : la seance reste possible.
         log.warning("seance %s : reference non lancee (%s)", row["id"][:8], exc.code)
         return
     conn.execute("UPDATE sessions SET reference_job_id = ? WHERE id = ?", (job["id"], row["id"]))
+    # Arbre de reference : defenses critiques pendant le calcul du joueur, puis
+    # ses propres branches apres la soumission. Rien n'en sort avant la revelation.
+    request.app.state.reference.create(conn, position_id=row["position_id"], session_id=row["id"], root_job=job)
 
 
 # ----------------------------------------------------------------- routes
@@ -253,7 +266,14 @@ def submit(session_id: UUID, body: SubmitIn, request: Request) -> dict:
             row["mode"] == "mental" and row["lines_text"].strip())
         sessions_repo.submit(conn, row, assessment, snapshot)
 
-    return _mutate(request, session_id, body.expected_revision, action)
+    view = _mutate(request, session_id, body.expected_revision, action)
+    if view.get("preparation") is not None:
+        # Les branches du joueur sont connues : elles passent en tete de l'arbre.
+        with request.app.state.db.session() as conn:
+            tree_id = sessions_repo.get(conn, str(session_id))["reference_tree_id"]
+        if tree_id:
+            request.app.state.reference.advance(tree_id)
+    return view
 
 
 @router.post("/sessions/{session_id}/reveal")
@@ -282,7 +302,15 @@ def abandon(session_id: UUID, body: RevisionIn, request: Request) -> dict:
 def export(session_id: UUID, request: Request, format: Literal["json", "pgn"] = "json"):
     view = _view(request, str(session_id))
     if format == "json":
-        return {"format": "cct-session", "format_version": 1, "session": view}
+        payload = {"format": "cct-session", "format_version": 1, "session": view}
+        if view["state"] in REVEALED_STATES:
+            with request.app.state.db.session() as conn:
+                stored = review_repo.latest(conn, str(session_id))
+                # Meme regle que partout : une seance non revelee sur cet echiquier masque tout.
+                hidden = analysis_repo.unrevealed_session_on_board(conn, view["position"]["fen"]) is not None
+            payload["review"] = ({"status": "hidden"} if hidden
+                                 else json.loads(stored["report_json"]) if stored is not None else None)
+        return payload
     # Tentative soumise si elle existe, sinon l'arbre en cours.
     tree = view["attempt"]["tree"] if view["attempt"] else view["tree"]["nodes"]
     headers = {"Event": "Chess Calculation Trainer", "Site": "local",
@@ -291,6 +319,53 @@ def export(session_id: UUID, request: Request, format: Literal["json", "pgn"] = 
     pgn_text = training.export_pgn(view["position"]["fen"], tree or {}, headers, view["notes"])
     return PlainTextResponse(pgn_text, media_type="application/x-chess-pgn",
                              headers={"Content-Disposition": f'attachment; filename="seance-{session_id}.pgn"'})
+
+
+def _reference_for_review(conn: sqlite3.Connection, tree: sqlite3.Row, position: dict) -> review_domain.Reference:
+    nodes = {}
+    for node in reference_repo.nodes(conn, tree["id"]):
+        path = reference_repo.path_of(node)
+        _job, lines = reference_repo.full_lines(conn, node, position)  # points stables enregistres seulement
+        terminal = None
+        if node["status"] == "terminal":
+            outcome = reference_repo.board_at(position, path).outcome(claim_draw=False)
+            terminal = terminal_score(outcome.result()) if outcome else None
+        nodes[path] = review_domain.RefNode(
+            node_id=node["id"], path=path, status=node["status"], reason=node["selection_reason"], lines=lines,
+            final=node["status"] not in reference_repo.PENDING, terminal_score=terminal)
+    return review_domain.Reference(nodes, position["fen"], building=tree["state"] == "building")
+
+
+@router.get("/sessions/{session_id}/review")
+def review(session_id: UUID, request: Request) -> dict:
+    """Debriefing : diagnostics prudents, preuves et incertitudes (doc 07).
+
+    Recalcule tant que l'arbre de reference evolue ; enregistre des que le
+    rapport est stable (la seance passe alors `reviewed`)."""
+    with request.app.state.db.session() as conn:
+        row = sessions_repo.get(conn, str(session_id))
+        if row["state"] not in REVEALED_STATES:
+            raise sessions_repo.StateError("REVIEW_NOT_AVAILABLE",
+                                           "Le debriefing n'est disponible qu'apres la revelation.",
+                                           {"state": row["state"]})
+        tree = reference_repo.get_tree(conn, row["reference_tree_id"]) if row["reference_tree_id"] else None
+        if tree is not None and not tree_visible(conn, tree):
+            return {"session_id": row["id"], "status": "hidden",
+                    "message": "Reference masquee : une autre seance non revelee porte sur cette position."}
+        revision = tree["revision"] if tree is not None else None
+        stored = review_repo.latest(conn, row["id"])
+        if stored is not None and stored["tree_revision"] == revision:
+            return {"session_id": row["id"], "status": "available", "stored": True, "review_id": stored["id"],
+                    "tree_state": tree["state"] if tree is not None else None, **json.loads(stored["report_json"])}
+        position = repo.get_position(conn, row["position_id"])
+        reference = _reference_for_review(conn, tree, position) if tree is not None else None
+        report = review_domain.build_report(root_fen=position["fen"], attempt=sessions_repo.get_attempt(conn, row["id"]),
+                                            reference=reference, tree_state=tree["state"] if tree else None)
+        review_id = None
+        if report["quality"] != "provisional":
+            review_id = review_repo.save(conn, row, revision, report)
+        return {"session_id": row["id"], "status": "available", "stored": review_id is not None,
+                "review_id": review_id, "tree_state": tree["state"] if tree is not None else None, **report}
 
 
 @router.get("/history")

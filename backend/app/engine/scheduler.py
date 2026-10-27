@@ -71,6 +71,11 @@ class Scheduler:
         # Un seul thread d'ecriture : les instantanes d'un travail sont enregistres
         # dans l'ordre ou ils sont produits.
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis-writer")
+        # Abonnes appeles dans le thread d'ecriture : fin d'un travail (id), puis
+        # file vide. L'arbre de reference avance ainsi sans dependance circulaire.
+        self.on_finished: list = []
+        self.on_idle: list = []
+        self._idle_pending = True
 
     # ---------------------------------------------------------- cycle de vie
 
@@ -114,7 +119,16 @@ class Scheduler:
         with self.db.session() as conn:
             return fn(conn, *args, **kwargs)
 
+    def _notify(self, listeners: list, *args) -> None:
+        """Appelle les abonnes ; une erreur d'abonne n'arrete jamais la file."""
+        for listener in listeners:
+            try:
+                listener(*args)
+            except Exception:
+                log.exception("abonne du planificateur en echec")
+
     async def _run(self) -> None:
+        loop = asyncio.get_running_loop()
         while True:
             try:
                 job = await asyncio.to_thread(self._with_conn, analysis_repo.claim_next)
@@ -122,12 +136,18 @@ class Scheduler:
                 log.exception("lecture de la file impossible")
                 job = None
             if job is None:
+                if self._idle_pending and self.on_idle:
+                    # File vide : les abonnes peuvent relancer des travaux en attente.
+                    self._idle_pending = False
+                    await loop.run_in_executor(self._writer, self._notify, self.on_idle)
+                    continue
                 self._wake.clear()
                 try:
                     await asyncio.wait_for(self._wake.wait(), timeout=30)
                 except TimeoutError:
                     pass
                 continue
+            self._idle_pending = True
             try:
                 await self._execute(job)
             except asyncio.CancelledError:
@@ -143,16 +163,32 @@ class Scheduler:
                     log.exception("analyse %s : impossible de marquer l'echec", job["id"][:8])
                 self.live.pop(job["id"], None)
                 self.broker.notify(job["id"])
+            await loop.run_in_executor(self._writer, self._notify, self.on_finished, job["id"])
 
     def _board(self, job) -> chess.Board:
         with self.db.session() as conn:
             position = repo.get_position(conn, job["position_id"])
-        # Rejoue l'historique connu : le moteur recoit « position fen ... moves ... »
-        # et voit donc les repetitions passees.
-        board = chess.Board(position["initial_fen"])
-        for uci in position["history_uci"] or ():
-            board.push_uci(uci)
-        return board
+        return analysis_repo.job_board(position, analysis_repo.node_path(job))
+
+    async def _guarded(self, search):
+        """Recherche surveillee : si le processus Stockfish meurt avant que
+        python-chess ne l'ait signale a la commande en cours (mort juste avant
+        le debut de la recherche), on ne reste pas bloque indefiniment."""
+        task = asyncio.ensure_future(search)
+        died = self.engine.engine.returncode
+        try:
+            await asyncio.wait({task, died}, return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError:  # arret du serveur : la recherche s'arrete avec nous
+            task.cancel()
+            raise
+        if task.done():
+            return task.result()
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, chess.engine.EngineError):
+            pass
+        raise chess.engine.EngineTerminatedError(f"processus du moteur termine (code {died.result()})")
 
     async def _execute(self, job) -> None:
         job_id = job["id"]
@@ -188,11 +224,11 @@ class Scheduler:
             if self.engine.info is None:
                 raise RuntimeError("moteur indisponible")
             async with self.engine.lock:
-                result = await analyse_root(
+                result = await self._guarded(analyse_root(
                     self.engine.engine, board, target_depth=settings["target_depth"],
                     multipv_max=settings["multipv_max"], budget_s=settings["budget_s"],
                     on_progress=on_progress, stop_event=self._stop_event,
-                )
+                ))
         except (chess.engine.EngineTerminatedError, chess.engine.EngineError) as exc:
             error = "le moteur s'est arrete pendant le calcul"
             log.error("analyse %s : %s (%r) ; redemarrage du moteur", job_id[:8], error, exc)

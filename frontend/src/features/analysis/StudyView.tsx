@@ -6,6 +6,8 @@ import { api, ApiFailure, type AnalysisJob, type Position } from '../../api/clie
 import { ChessboardAdapter } from '../../adapters/ChessboardAdapter';
 import { AnalysisPanel, type ShownPosition } from './AnalysisPanel';
 import { useJobStream } from './useJobStream';
+import { ReferenceTreeView } from '../reference/ReferenceTreeView';
+import { isBuilding, useTree } from '../reference/useTree';
 
 function message(err: unknown): string {
   return err instanceof ApiFailure ? `${err.error.message} (${err.error.code})` : 'Erreur inattendue.';
@@ -20,6 +22,8 @@ export function StudyView({ positionId }: { positionId: string }) {
   const [shown, setShown] = useState<ShownPosition | null>(null);
   const [orientation, setOrientation] = useState<'white' | 'black'>('white');
   const job = useJobStream(jobId, initial);
+  const [treeId, setTreeId] = useState<string | null>(null);
+  const { tree, refresh: refreshTree } = useTree(treeId);
 
   useEffect(() => {
     api.position(positionId).then((p) => { setPosition(p); setOrientation(p.turn); }).catch((e) => setError(message(e)));
@@ -28,7 +32,25 @@ export function StudyView({ positionId }: { positionId: string }) {
       const last = r.items[0];
       if (last) { setInitial(last); setJobId(last.id); }
     }).catch(() => {});
+    api.referenceTrees(positionId).then((r) => setTreeId(r.items[0]?.id ?? null)).catch(() => {});
   }, [positionId]);
+
+  async function buildTree() {
+    setError(null);
+    try {
+      const created = await api.createTree(positionId, settings);
+      setShown(null);
+      setTreeId(created.id);
+      refreshTree(created);
+      // L'analyse racine de l'arbre est celle de l'etude : on la suit aussi.
+      if (created.visibility === 'full') {
+        const rootJob = created.nodes.find((n) => n.ply === 0)?.job_id;
+        if (rootJob && rootJob !== jobId) { setInitial(null); setJobId(rootJob); }
+      }
+    } catch (err) {
+      setError(message(err));
+    }
+  }
 
   async function start() {
     setError(null);
@@ -80,12 +102,20 @@ export function StudyView({ positionId }: { positionId: string }) {
           </fieldset>
           <button type="button" className="primary" onClick={start} disabled={running}>Analyser</button>
           <button type="button" onClick={stop} disabled={!running}>Arreter</button>
+          <button type="button" onClick={buildTree} disabled={isBuilding(tree)}
+                  title="Analyse racine, puis defenses adverses critiques et meilleures ripostes, sous plafonds">
+            Construire l'arbre de reference
+          </button>
           {job?.visibility === 'full' && job.reused && <p className="note">Resultat deja calcule avec ces reglages (cache).</p>}
         </div>
       </div>
       {job?.visibility === 'full' && <AnalysisPanel key={job.id} job={job} rootFen={position.fen} onShow={setShown} />}
       {job?.visibility === 'hidden' && (
         <p className="note">Analyse masquee : une seance d'entrainement non revelee porte sur cette position.</p>
+      )}
+      {tree?.visibility === 'full' && (
+        <ReferenceTreeView tree={tree} rootFen={position.fen} onShow={setShown}
+                           onExpand={(path) => api.expand(tree.id, path).then((t) => refreshTree(t))} />
       )}
     </section>
   );

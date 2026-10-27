@@ -48,9 +48,12 @@ Le doc 14 demande de les consigner ici.
   20–60 s sur le VPS, ~1–3 min estimées sur un portable Windows. Le budget de 300 s à
   la racine tient. Le risque se déplace vers l'expansion (80 nœuds / 300 s) : à
   mesurer au Lot 4 et sur le PC Windows de référence.
-- **Lot 4.** Les seuils de diagnostic ne sont pas calibrés et le corpus de 20 positions
-  doit être annoté à la main. Jusque-là, verdict `unverified` par défaut ; aucun verdict
-  fort.
+- **Lot 4.** Les seuils de diagnostic restent des valeurs de conception (`review.POLICY`,
+  versionnée). Le corpus de 21 positions (`backend/tests/corpus/`) est annoté par
+  l'implémenteur sur des écarts nets (mat, pièce perdue, finale nulle) ; il **doit être
+  relu par un joueur** avant toute conclusion pédagogique. Hors corpus, la prudence vient
+  de la règle : pas de verdict sans évaluation exacte à profondeur ≥ 12, et une réfutation
+  exige un changement de classe (gagnant / équilibré / perdant).
 - **Arbre UI.** Le spike du Lot 0 compare `react-arborist` à un rendu PGN inline
   indenté ; D3 impose un arbre, pas un widget précis.
 
@@ -62,3 +65,34 @@ Le doc 14 demande de les consigner ici.
   rebinding, CSRF) est couverte par la validation Host/Origin.
 - Doc 16 : les modèles `templates/` font foi ; les exemples du doc 16 sont caducs.
 - Gates W01–W12 : **non validées** tant qu'aucun Windows 11 réel n'a été testé.
+
+## Lot 4 : arbre de référence et débriefing
+
+- **Nœud = travail sur la racine + un chemin.** Un nœud de l'arbre n'est pas un nouvel
+  instantané de position : c'est un travail d'analyse portant sur la position de
+  l'exercice et une suite UCI (`analysis_jobs.node_path_json`). La règle anti-spoiler
+  (échiquier de la racine) s'applique donc telle quelle à tout l'arbre, et le moteur
+  reçoit l'historique complet (répétitions comprises).
+- **Routes** : `/api/v1/reference-trees` (création en étude libre, liste par position),
+  `/reference-trees/{id}` et `/reference-trees/{id}/expand`, plutôt que
+  `/positions/{id}/reference-tree` et `/positions/{id}/expand` (doc 08) : une position
+  peut porter plusieurs arbres (séances successives, réglages différents).
+- **Deux enveloppes** (nœuds et temps) de mêmes plafonds : exploration automatique
+  (meilleurs coups, défenses critiques) et branches du joueur. Sans cela, la
+  préparation lancée pendant que le joueur calcule épuiserait les 80 nœuds et les 300 s
+  avant la soumission, et ses propres coups resteraient non vérifiés.
+- **Politique d'expansion** (doc 06) : à la racine les 3 meilleurs coups ; côté adverse
+  la meilleure défense, plus les réponses à moins de 150 cp d'elle (au plus 3) ; côté du
+  joueur la meilleure riposte ; jusqu'à 4 demi-coups. MultiPV 3 aux nœuds, profondeur
+  21, 30 s par nœud au plus. `score_swing` n'est pas encore une raison de sélection.
+- **Équité de la file** : vieillissement de +1 de priorité par minute d'attente.
+- **Évaluation d'un coup** : de préférence la ligne de la recherche du parent (même
+  recherche que les alternatives, donc comparable) ; sinon l'analyse ciblée de la
+  position après le coup (profondeur locale + 1). Les transpositions sont annotées,
+  jamais utilisées comme preuve.
+- **`reviewed`** : posé quand le rapport est stable (arbre terminé) et enregistré, y
+  compris avec la qualité « référence insuffisante ». Une réanalyse demandée ensuite
+  produit un nouveau rapport (révision d'arbre différente) ; l'ancien reste en base.
+- **Taxonomie non implémentée telle quelle** : `evaluation_mismatch` ne compare que
+  « avantage blanc / noir / égalité » ; « initiative », « attaque », « incertain » sont
+  déclarés non comparables.

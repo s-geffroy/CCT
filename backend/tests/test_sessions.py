@@ -223,14 +223,19 @@ def test_hostile_client_finds_no_engine_data_before_reveal(client):
 
 def test_every_analysis_route_is_covered_by_the_hostile_client_test(client):
     """Doc 08 : aucun point d'entree d'analyse non garde. Toute nouvelle route
-    d'analyse doit etre ajoutee ici ET au test client hostile de test_analysis."""
+    d'analyse doit etre ajoutee ici ET au test client hostile (test_analysis pour les
+    travaux, test_reference_tree pour les arbres et le debriefing)."""
     paths = client.get("/openapi.json").json()["paths"]
-    analysis_paths = {p for p in paths if "analys" in p or "reference" in p or "expand" in p}
+    analysis_paths = {p for p in paths if any(k in p for k in ("analys", "reference", "expand", "review"))}
     assert analysis_paths == {
         "/api/v1/analysis-jobs",
         "/api/v1/analysis-jobs/{job_id}",
         "/api/v1/analysis-jobs/{job_id}/cancel",
         "/api/v1/analysis-jobs/{job_id}/events",
+        "/api/v1/reference-trees",
+        "/api/v1/reference-trees/{tree_id}",
+        "/api/v1/reference-trees/{tree_id}/expand",
+        "/api/v1/sessions/{session_id}/review",
     }
 
 

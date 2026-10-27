@@ -11,7 +11,6 @@ import sqlite3
 from typing import Annotated
 from uuid import UUID
 
-import chess
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import Field
@@ -19,18 +18,13 @@ from pydantic import Field
 from ..domain.errors import DomainError, NotFound
 from ..log import get_logger
 from ..persistence import analysis_repo, repo
+from ..services import PRIORITY_STUDY
 from .schemas import StrictModel
 
 router = APIRouter(prefix="/api/v1")
 log = get_logger("api.analysis")
 
 HEARTBEAT_S = 15.0
-PRIORITY_STUDY = 100           # demande explicite de l'utilisateur
-PRIORITY_SESSION_REFERENCE = 50  # preparation de fond d'une seance
-
-
-class EngineUnavailable(DomainError):
-    status_code = 503
 
 
 class SessionInProgress(DomainError):
@@ -44,39 +38,24 @@ class JobIn(StrictModel):
     budget_s: int = Field(default=300, ge=5, le=1800)
 
 
-def default_settings() -> dict:
-    return {"target_depth": 21, "multipv_max": 20, "budget_s": 300}
+def enqueue(request: Request, conn: sqlite3.Connection, **kwargs) -> tuple[sqlite3.Row, bool]:
+    return request.app.state.analysis.enqueue(conn, **kwargs)
 
 
-def enqueue(request: Request, conn: sqlite3.Connection, *, position_id: str, session_id: str | None,
-            purpose: str, priority: int, settings: dict) -> tuple[sqlite3.Row, bool]:
-    engine = request.app.state.engine
-    if engine.info is None:
-        raise EngineUnavailable("ENGINE_UNAVAILABLE", "Moteur indisponible : analyse impossible pour l'instant.")
-    position = repo.get_position(conn, position_id)
-    if position is None:
-        raise NotFound("POSITION_NOT_FOUND", "Position inconnue.")
-    if position["outcome"]:
-        raise DomainError("TERMINAL_POSITION", "Partie terminee dans cette position : aucune variante a calculer.")
-    engine_desc = {"name": engine.info.name, "build": engine.info.build,
-                   "threads": engine.info.threads, "hash_mb": engine.info.hash_mb}
-    context = conn.execute("SELECT context_key FROM positions WHERE id = ?", (position_id,)).fetchone()[0]
-    full_settings = {**settings, "engine": engine_desc}
-    key = analysis_repo.cache_key(context, engine_desc, settings)
-    job, reused = analysis_repo.create_or_reuse(
-        conn, position_id=position_id, session_id=session_id, purpose=purpose, priority=priority,
-        settings=full_settings, key=key, max_queued=request.app.state.settings.max_queued_jobs)
-    if not reused:
-        request.app.state.scheduler.wake()
-    return job, reused
+def require_no_session_in_progress(conn: sqlite3.Connection, fen: str) -> None:
+    if analysis_repo.unrevealed_session_on_board(conn, fen):
+        raise SessionInProgress(
+            "SESSION_IN_PROGRESS",
+            "Une seance d'entrainement non revelee porte sur cette position : la terminer ou l'abandonner avant de l'analyser.")
 
 
 def job_view(conn: sqlite3.Connection, scheduler, job: sqlite3.Row) -> dict:
     if not analysis_repo.is_visible(conn, job):
         return analysis_repo.hidden_view(job)
-    fen = repo.get_position(conn, job["position_id"])["fen"]
+    position = repo.get_position(conn, job["position_id"])
     live = scheduler.live.get(job["id"]) if scheduler is not None else None
-    return analysis_repo.full_view(conn, job, chess.Board(fen), live)
+    board = analysis_repo.job_board(position, analysis_repo.node_path(job))
+    return analysis_repo.full_view(conn, job, board, live)
 
 
 @router.post("/analysis-jobs", status_code=201)
@@ -85,10 +64,7 @@ def create_job(body: JobIn, request: Request, response: Response) -> dict:
         position = repo.get_position(conn, str(body.position_id))
         if position is None:
             raise NotFound("POSITION_NOT_FOUND", "Position inconnue.")
-        if analysis_repo.unrevealed_session_on_board(conn, position["fen"]):
-            raise SessionInProgress(
-                "SESSION_IN_PROGRESS",
-                "Une seance d'entrainement non revelee porte sur cette position : la terminer ou l'abandonner avant de l'analyser.")
+        require_no_session_in_progress(conn, position["fen"])
         job, reused = enqueue(request, conn, position_id=position["id"], session_id=None, purpose="study",
                               priority=PRIORITY_STUDY,
                               settings={"target_depth": body.target_depth, "multipv_max": body.multipv_max,

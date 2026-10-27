@@ -3,6 +3,8 @@ import type { EngineScore } from '../../api/client';
 /** Evaluation au point de vue des Blancs : +0.35, -1.20, M+3, M-2 ; bornes ≥ / ≤. */
 export function formatScore(score: EngineScore): string {
   const bound = score.bound === 'lower' ? '≥' : score.bound === 'upper' ? '≤' : '';
+  if (score.kind === 'draw') return 'nulle';
+  if (score.kind === 'mate' && score.value === 0) return score.result ? `mat (${score.result})` : 'mat';
   if (score.kind === 'mate' && score.value !== null) return `${bound}M${score.value > 0 ? '+' : '-'}${Math.abs(score.value)}`;
   if (score.kind === 'cp' && score.value !== null) {
     const pawns = score.value / 100;

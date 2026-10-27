@@ -41,7 +41,7 @@ def board_key(fen: str) -> str:
     return " ".join(fen.split()[:4])
 
 
-def cache_key(context_key: str, engine: dict, settings: dict) -> str:
+def cache_key(context_key: str, engine: dict, settings: dict, path: list[str] | None = None) -> str:
     payload = {
         "context": context_key,
         "engine": [engine.get("name"), engine.get("build", {}).get("net_sha256"), engine.get("threads"), engine.get("hash_mb")],
@@ -49,6 +49,10 @@ def cache_key(context_key: str, engine: dict, settings: dict) -> str:
         "multipv_max": settings["multipv_max"],
         "policy": ANALYSIS_POLICY_VERSION,
     }
+    if path:
+        # Noeud d'arbre de reference : position racine + suite de coups. Absent
+        # pour une racine, afin de garder les cles des travaux deja calcules.
+        payload["path"] = list(path)
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
@@ -78,7 +82,8 @@ def get(conn: sqlite3.Connection, job_id: str) -> sqlite3.Row:
 
 
 def create_or_reuse(conn: sqlite3.Connection, *, position_id: str, session_id: str | None, purpose: str,
-                    priority: int, settings: dict, key: str, max_queued: int) -> tuple[sqlite3.Row, bool]:
+                    priority: int, settings: dict, key: str, max_queued: int,
+                    node_path: list[str] | None = None) -> tuple[sqlite3.Row, bool]:
     """Deduplique les demandes equivalentes ; reutilise un resultat a profondeur atteinte."""
     with transaction(conn):
         reusable = conn.execute(
@@ -94,8 +99,9 @@ def create_or_reuse(conn: sqlite3.Connection, *, position_id: str, session_id: s
         job_id = str(uuid.uuid4())
         conn.execute(
             "INSERT INTO analysis_jobs (id, position_id, session_id, purpose, scope, priority, state, settings_json,"
-            " cache_key, created_at) VALUES (?, ?, ?, ?, 'root', ?, 'queued', ?, ?, ?)",
-            (job_id, position_id, session_id, purpose, priority, json.dumps(settings), key, utc_now()),
+            " cache_key, created_at, node_path_json) VALUES (?, ?, ?, ?, 'root', ?, 'queued', ?, ?, ?, ?)",
+            (job_id, position_id, session_id, purpose, priority, json.dumps(settings), key, utc_now(),
+             json.dumps(node_path) if node_path else None),
         )
         return get(conn, job_id), False
 
@@ -110,9 +116,12 @@ def mark_interrupted_on_startup(conn: sqlite3.Connection) -> int:
 
 
 def claim_next(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """Priorite, avec vieillissement (+1 par minute d'attente) : un travail de
+    fond n'est pas affame indefiniment par des demandes plus prioritaires."""
     with transaction(conn):
         row = conn.execute(
-            "SELECT * FROM analysis_jobs WHERE state = 'queued' ORDER BY priority DESC, created_at LIMIT 1"
+            "SELECT * FROM analysis_jobs WHERE state = 'queued'"
+            " ORDER BY priority + (julianday('now') - julianday(created_at)) * 1440 DESC, created_at LIMIT 1"
         ).fetchone()
         if row is None:
             return None
@@ -185,8 +194,22 @@ def latest_lines(conn: sqlite3.Connection, job_id: str) -> list[sqlite3.Row]:
 
 def jobs_for_position(conn: sqlite3.Connection, position_id: str, limit: int = 10) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT * FROM analysis_jobs WHERE position_id = ? ORDER BY created_at DESC LIMIT ?", (position_id, limit)
+        "SELECT * FROM analysis_jobs WHERE position_id = ? AND node_path_json IS NULL ORDER BY created_at DESC LIMIT ?",
+        (position_id, limit)
     ).fetchall()
+
+
+def node_path(job: sqlite3.Row) -> list[str]:
+    return json.loads(job["node_path_json"]) if job["node_path_json"] else []
+
+
+def job_board(position: dict, path: list[str] | None = None) -> chess.Board:
+    """Echiquier rejoue avec son historique connu, puis le chemin du noeud :
+    le moteur recoit « position fen ... moves ... » et voit les repetitions."""
+    board = chess.Board(position["initial_fen"])
+    for uci in [*(position["history_uci"] or ()), *(path or ())]:
+        board.push_uci(uci)
+    return board
 
 
 # ------------------------------------------------------------------ vues
@@ -255,6 +278,7 @@ def full_view(conn: sqlite3.Connection, job: sqlite3.Row, board: chess.Board, li
     return {
         "id": job["id"],
         "position_id": job["position_id"],
+        "node_path_uci": node_path(job),
         "visibility": "full",
         "purpose": job["purpose"],
         "state": job["state"],

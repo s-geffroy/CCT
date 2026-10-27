@@ -169,7 +169,9 @@ def get_attempt(conn: sqlite3.Connection, session_id: str) -> dict | None:
 def history(conn: sqlite3.Connection, limit: int, offset: int) -> list[dict]:
     rows = conn.execute(
         "SELECT s.id, s.mode, s.state, s.started_at, s.submitted_at, s.revealed_at, s.duration_ms,"
-        " p.id AS position_id, p.fen FROM sessions s JOIN positions p ON p.id = s.position_id"
+        " p.id AS position_id, p.fen,"
+        " (SELECT r.quality FROM reviews r WHERE r.session_id = s.id ORDER BY r.created_at DESC LIMIT 1) AS review_quality"
+        " FROM sessions s JOIN positions p ON p.id = s.position_id"
         " ORDER BY s.started_at DESC LIMIT ? OFFSET ?",
         (limit, offset),
     ).fetchall()

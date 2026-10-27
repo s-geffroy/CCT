@@ -54,6 +54,14 @@ class Settings:
     allowed_origins: list[str] = field(default_factory=lambda: _list_env("ALLOWED_ORIGINS", []))
     max_queued_jobs: int = field(default_factory=lambda: _int_env("MAX_QUEUED_JOBS", 20, 1, 1000))
     engine_enabled: bool = field(default_factory=lambda: os.environ.get("ENGINE_ENABLED", "1") != "0")
+    # Reference d'une seance (doc 06) : analyse racine puis arbre sous plafonds.
+    reference_depth: int = field(default_factory=lambda: _int_env("REFERENCE_DEPTH", 21, 8, 32))
+    reference_budget_s: int = field(default_factory=lambda: _int_env("REFERENCE_BUDGET_S", 300, 5, 3600))
+    tree_budget_s: int = field(default_factory=lambda: _int_env("TREE_BUDGET_S", 300, 0, 3600))
+    tree_max_nodes: int = field(default_factory=lambda: _int_env("TREE_MAX_NODES", 80, 1, 500))
+    tree_node_depth: int = field(default_factory=lambda: _int_env("TREE_NODE_DEPTH", 21, 8, 32))
+    tree_node_budget_s: int = field(default_factory=lambda: _int_env("TREE_NODE_BUDGET_S", 30, 5, 600))
+    tree_auto_max_ply: int = field(default_factory=lambda: _int_env("TREE_AUTO_MAX_PLY", 4, 0, 12))
 
 
 def get_settings() -> Settings:

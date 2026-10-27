@@ -36,8 +36,20 @@ les labels a la main.
   sont lisibles que si aucune seance `active`/`submitted` ne porte sur le meme
   echiquier. Toute nouvelle route d'analyse doit passer par `job_view()` et
   etre ajoutee au test client hostile (un test echoue sinon).
+  La meme regle couvre l'arbre de reference (`tree_view()`, echiquier de sa
+  racine : un noeud est un travail sur la racine + un chemin), le debriefing
+  (`/sessions/{id}/review`) et l'export JSON d'une seance deja revelee.
 - Le planificateur (`engine/scheduler.py`) ne doit jamais s'arreter sur une
   erreur de travail : il la journalise, marque le travail `failed`, continue.
+  Ses abonnes (`on_finished`, `on_idle`) non plus : l'arbre de reference
+  (`services.ReferenceService`) avance par eux, dans le thread d'ecriture.
+- Arbre de reference : deux enveloppes de memes plafonds (`TREE_*`), l'une pour
+  l'exploration automatique, l'autre pour les branches du joueur, sinon la
+  preparation pendant la seance epuiserait la verification de ses coups.
+- Debriefing (`domain/review.py`) : pur, sans moteur ; une evaluation n'est une
+  preuve qu'exacte et a profondeur >= `min_verdict_depth`. Tout changement de
+  seuil change `POLICY["version"]` et passe par le corpus
+  (`backend/tests/corpus/positions.json`, un test par cas).
 
 ## Services Compose
 

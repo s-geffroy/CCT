@@ -12,6 +12,7 @@ Aucune promesse d'exhaustivite : jusqu'a 20 premiers coups, profondeur cible
 - Rapport du Lot 1 (SQLite, migrations, instantanes de position) : `docs/lot1-report.md`
 - Rapport du Lot 2 (seances B/C, immuabilite, anti-spoiler) : `docs/lot2-report.md`
 - Rapport du Lot 3 (orchestrateur Stockfish, SSE, etude libre) : `docs/lot3-report.md`
+- Rapport du Lot 4 (arbre de reference ramifie, debriefing, corpus) : `docs/lot4-report.md`
 
 Cible finale : Windows 11 x64 + Docker Desktop/WSL 2, image GHCR
 `linux/amd64` et installation par double-clic (Lot 6). **Ce VPS sert au
@@ -21,7 +22,8 @@ developpement et aux tests uniquement** : aucun port publie.
 
 | chemin | contenu |
 |---|---|
-| `backend/app/` | FastAPI : `api/`, `domain/` (FEN, PGN, coups, instantanes), `engine/` (UCI, analyse, bench), `persistence/` (SQLite, migrations) |
+| `backend/app/` | FastAPI : `api/`, `domain/` (FEN, PGN, coups, instantanes, politique d'arbre, debriefing), `engine/` (UCI, analyse, planificateur, bench), `persistence/` (SQLite, migrations), `services.py` (file d'analyse, arbre de reference) |
+| `backend/tests/corpus/` | corpus annote de 21 positions (DoD du Lot 4), versionne |
 | `backend/tests/` | pytest, dont integration avec le vrai Stockfish |
 | `backend/Dockerfile` | multi-stage : `stockfish` (sf_19 universal), `frontend`, `pydeps`, `runtime`, `test`, `devtools` |
 | `frontend/` | React 19 + TypeScript + Vite ; `react-chessboard`, `react-arborist` via adaptateurs |

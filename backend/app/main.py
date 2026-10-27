@@ -12,6 +12,7 @@ from starlette.staticfiles import StaticFiles
 
 from .api.analysis import router as analysis_router
 from .api.library import router as library_router
+from .api.reference import router as reference_router
 from .api.routes import router
 from .api.sessions import router as sessions_router
 from .domain.errors import DomainError
@@ -19,6 +20,7 @@ from .engine.scheduler import Scheduler
 from .engine.uci import EngineManager
 from .persistence.db import Database
 from .log import get_logger, setup_logging
+from .services import AnalysisService, ReferenceService
 from .settings import APP_VERSION, Settings, get_settings
 
 log = get_logger("app")
@@ -58,6 +60,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = EngineManager(settings)
     app.state.db = Database(settings.data_dir / "app.sqlite")
     app.state.scheduler = Scheduler(app.state.db, app.state.engine, max_queued=settings.max_queued_jobs)
+    app.state.analysis = AnalysisService(settings, app.state.engine, app.state.scheduler)
+    app.state.reference = ReferenceService(app.state.db, app.state.analysis)
+    app.state.scheduler.on_finished.append(app.state.reference.on_job_finished)
+    app.state.scheduler.on_idle.append(app.state.reference.on_idle)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -94,6 +100,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(library_router)
     app.include_router(sessions_router)
     app.include_router(analysis_router)
+    app.include_router(reference_router)
     _mount_static(app, settings.static_dir)
     return app
 

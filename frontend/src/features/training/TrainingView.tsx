@@ -15,6 +15,9 @@ import { MoveText } from '../../components/MoveText';
 import { formatHistory } from '../positions/RetainedPanel';
 import { AnalysisPanel, type ShownPosition } from '../analysis/AnalysisPanel';
 import { useJobStream } from '../analysis/useJobStream';
+import { ReferenceTreeView } from '../reference/ReferenceTreeView';
+import { useTree } from '../reference/useTree';
+import { ReviewPanel } from '../review/ReviewPanel';
 
 export const ASSESSMENT_LABEL: Record<Assessment, string> = {
   white_better: 'avantage blanc',
@@ -71,6 +74,8 @@ export function TrainingView({ sessionId, onExit }: Props) {
   // Avant revelation : le flux ne transporte que l'etat de preparation.
   const preparingId = session && !['revealed', 'reviewed'].includes(session.state) ? session.preparation?.job_id ?? null : null;
   const preparing = useJobStream(preparingId);
+  const revealedTreeId = session && ['revealed', 'reviewed'].includes(session.state) ? session.reference_tree?.id ?? null : null;
+  const { tree: referenceTree, refresh: refreshTree } = useTree(revealedTreeId, session?.reference_tree ?? null);
 
   useEffect(() => {
     api.session(sessionId).then((s) => {
@@ -155,7 +160,7 @@ export function TrainingView({ sessionId, onExit }: Props) {
             lastMove={shownPv?.lastMove ?? lastMove}
             onMove={addMove}
           />
-          {shownPv && <p className="shown" data-testid="shown-position">Variante moteur : {shownPv.label}</p>}
+          {shownPv && <p className="shown" data-testid="shown-position">Affiche : {shownPv.label}</p>}
           <button type="button" onClick={() => setOrientation((o) => (o === 'white' ? 'black' : 'white'))}>
             Retourner l'echiquier
           </button>
@@ -310,6 +315,14 @@ export function TrainingView({ sessionId, onExit }: Props) {
       )}
       {revealed && liveReference?.visibility === 'hidden' && (
         <p className="note">Reference masquee : une autre seance non revelee porte sur cette position.</p>
+      )}
+      {revealed && s.attempt && (
+        <ReviewPanel sessionId={s.id} attempt={s.attempt} rootFen={rootFen} onShow={setShownPv}
+                     refreshKey={referenceTree?.visibility === 'full' ? referenceTree.revision : 0} />
+      )}
+      {revealed && referenceTree?.visibility === 'full' && (
+        <ReferenceTreeView tree={referenceTree} rootFen={rootFen} onShow={setShownPv}
+                           onExpand={(path) => api.expand(referenceTree.id, path).then((t) => refreshTree(t))} />
       )}
     </section>
   );
