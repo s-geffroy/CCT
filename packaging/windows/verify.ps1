@@ -37,6 +37,5 @@ if ((Resolve-WslPrerequisite) -eq 'reboot') {
     throw 'WSL vient d etre installe ou mis a jour : redemarrez Windows, puis relancez INSTALLER.cmd (l installation reprendra ici).'
 }
 Resolve-DockerPrerequisite -Interactive
-& docker compose version 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Docker Compose v2 indisponible : mettez Docker Desktop a jour (son menu > Check for updates).' }
+if ((Invoke-Native 'docker' @('compose', 'version')).ExitCode -ne 0) { throw 'Docker Compose v2 indisponible : mettez Docker Desktop a jour (son menu > Check for updates).' }
 Write-Host 'Pre-requis verifies : Windows 11 x64, memoire, disque, WSL 2, Docker Desktop (conteneurs Linux), Compose.'
