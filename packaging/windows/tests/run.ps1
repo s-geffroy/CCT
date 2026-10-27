@@ -3,11 +3,14 @@
 # Code de sortie non nul au moindre probleme (utilise par la CI et par appctl).
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+# Installateur natif (Lot 7) : memes regles, sous-dossiers compris.
+$native = Join-Path (Split-Path -Parent $root) 'windows-native'
 $failures = 0
 
 # 1. ASCII et CRLF : Windows PowerShell 5.1 lit un .ps1 sans BOM en ANSI, et
 #    cmd.exe lit mal un .cmd en LF.
-foreach ($file in Get-ChildItem -LiteralPath $root -File | Where-Object { $_.Extension -in @('.ps1', '.cmd') }) {
+$scripts = @(Get-ChildItem -LiteralPath $root -File) + @(Get-ChildItem -LiteralPath $native -File -Recurse)
+foreach ($file in $scripts | Where-Object { $_.Extension -in @('.ps1', '.cmd', '.iss') }) {
     $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
     if (@($bytes | Where-Object { $_ -gt 127 }).Count -gt 0) { Write-Host ('NON ASCII : ' + $file.Name); $failures++ }
     $text = [System.Text.Encoding]::ASCII.GetString($bytes)
@@ -24,13 +27,13 @@ $settings = @{
     )
     Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1', '7.0') } }
 }
-$findings = @(Invoke-ScriptAnalyzer -Path $root -Settings $settings)
+$findings = @(Invoke-ScriptAnalyzer -Path $root -Settings $settings) + @(Invoke-ScriptAnalyzer -Path $native -Recurse -Settings $settings)
 foreach ($f in $findings) { Write-Host ('{0}:{1} [{2}] {3}' -f $f.ScriptName, $f.Line, $f.RuleName, $f.Message) }
 $failures += $findings.Count
 
 # 3. Tests Pester.
 $config = New-PesterConfiguration
-$config.Run.Path = $PSScriptRoot
+$config.Run.Path = @($PSScriptRoot, (Join-Path $native 'tests'))
 $config.Run.PassThru = $true
 $config.Output.Verbosity = 'Detailed'
 $result = Invoke-Pester -Configuration $config

@@ -19,6 +19,7 @@ import errno
 import json
 import os
 import secrets
+import shutil
 import socket
 import sys
 import threading
@@ -167,6 +168,30 @@ def bind_port(preferred: int, attempts: int = PORT_ATTEMPTS) -> socket.socket:
 
 # ------------------------------------------------------------ lancement
 
+def _set_version() -> None:
+    """Installateur : la version est dans backend/VERSION (l'image Docker la passe par APP_VERSION)."""
+    version_file = Path(__file__).resolve().parent.parent / "VERSION"
+    if not os.environ.get("APP_VERSION") and version_file.is_file():
+        os.environ["APP_VERSION"] = version_file.read_text(encoding="utf-8").strip()
+
+
+def import_docker_backup(data_dir: Path) -> Path | None:
+    """Premier lancement apres le paquet Docker (v0.1.x) : sa derniere sauvegarde
+    (<racine>/backups/cct-*.sqlite, faite par SAUVEGARDER.cmd ou la mise a jour) est
+    deposee pour la restauration du demarrage, qui la verifie avant de la prendre."""
+    from . import backup
+
+    if (data_dir / "app.sqlite").exists():
+        return None
+    found = sorted((data_dir.parent / "backups").glob("cct-*.sqlite"))
+    if not found:
+        return None
+    incoming = data_dir / backup.RESTORE_DIR / backup.INCOMING
+    incoming.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(found[-1], incoming)
+    return found[-1]
+
+
 def _wait_and_open(server, url: str, open_browser: bool) -> None:
     while not server.started and not server.should_exit:
         time.sleep(0.1)
@@ -175,6 +200,7 @@ def _wait_and_open(server, url: str, open_browser: bool) -> None:
 
 
 def serve(data_dir: Path, port: int, open_browser: bool) -> int:
+    _set_version()
     import uvicorn
 
     from .log import get_logger, setup_logging
@@ -205,6 +231,9 @@ def serve(data_dir: Path, port: int, open_browser: bool) -> int:
         bound = sock.getsockname()[1]
         if bound != port:
             log.warning("port %d occupe : port %d utilise", port, bound)
+        migrated = import_docker_backup(data_dir)
+        if migrated is not None:
+            log.info("donnees de l'ancienne version Docker reprises : %s", migrated.name)
         token = secrets.token_urlsafe(32)
         settings = replace(get_settings(), data_dir=data_dir, static_dir=default_static_dir(),
                            desktop_token=token, allowed_hosts=["127.0.0.1", "localhost"])

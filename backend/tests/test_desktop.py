@@ -107,3 +107,24 @@ def test_single_instance_lifecycle(tmp_path):
     assert "application deja ouverte" in log
     assert "arret demande par le lanceur" in log and "cct.app arret" in log
     assert desktop.request_stop(data) is True  # plus rien a arreter
+
+
+def test_docker_backup_is_offered_to_the_first_native_start(tmp_path, settings):
+    """Passage du paquet Docker (v0.1.x) a l'installateur natif : meme racine
+    %LOCALAPPDATA%\\ChessCalculationTrainer, sauvegardes dans backups\\."""
+    from app import backup
+
+    root = tmp_path / "ChessCalculationTrainer"
+    old = replace(settings, data_dir=tmp_path / "docker-data")
+    with TestClient(create_app(old)) as c:  # une base Docker avec une position
+        c.post("/api/v1/positions", json={"source": "fen", "fen": "8/8/8/8/8/4k3/8/4K2R w K - 0 1"})
+    saved = backup.create(old.data_dir)
+    (root / "backups").mkdir(parents=True)
+    for name in ("cct-20261001-120000.sqlite", "cct-20261027-090000.sqlite"):
+        (root / "backups" / name).write_bytes(Path(saved["path"]).read_bytes())
+
+    data = root / "data"
+    assert desktop.import_docker_backup(data).name == "cct-20261027-090000.sqlite"  # la plus recente
+    with TestClient(create_app(replace(settings, data_dir=data))) as c:
+        assert len(c.get("/api/v1/positions").json()["items"]) == 1
+    assert desktop.import_docker_backup(data) is None  # base presente : jamais ecrasee
