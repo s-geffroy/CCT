@@ -16,10 +16,11 @@ test:
 
 # Dependances de l'installateur natif : exactement uv.lock (versions et empreintes).
 windows-requirements:
-	# Image distroless : pas de /tmp, ou uv ecrit un fichier temporaire.
-	docker run --rm --tmpfs /tmp -v "$(CURDIR)/backend:/b:ro" -w /b \
+	# Image distroless : pas de /tmp, ou uv ecrit un fichier temporaire. Options
+	# par variables : la ligne de commande est recopiee dans l en-tete compare.
+	docker run --rm --tmpfs /tmp -e UV_NO_CACHE=1 -v "$(CURDIR)/backend:/b:ro" -w /b \
 	  ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff \
-	  export --frozen --no-dev --no-emit-project --format requirements-txt --no-cache \
+	  export --frozen --no-dev --no-emit-project --format requirements-txt \
 	  | diff -u packaging/windows-native/requirements.txt -
 
 # Le ZIP Windows se fabrique et se controle (digest factice) : un defaut de
