@@ -18,7 +18,8 @@ export function EngineBanner() {
   return (
     <p role="status" className="mb-3 rounded-md border border-warning px-3 py-2 text-sm" data-testid="engine-banner">
       Moteur indisponible : les seances de calcul (B, C) restent possibles et seront analysees plus tard ;
-      l'etude libre et la reference sont suspendues.
+      l'etude libre et la reference sont suspendues.{' '}
+      <a href="#/settings">Installer ou choisir un moteur</a>
     </p>
   );
 }

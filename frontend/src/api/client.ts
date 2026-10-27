@@ -381,11 +381,13 @@ export type SettingField = {
   maximum?: number;
   unit?: string | null;
   choices?: string[];
+  kind?: 'text';
 };
 
 export type SettingsValues = {
   engine_threads: number;
   engine_hash_mb: number;
+  engine_path: string;
   study_depth: number;
   study_multipv: number;
   study_budget_s: number;
@@ -415,4 +417,29 @@ export const settingsApi = {
     const body = await res.json().catch(() => null);
     return body?.checks ?? null;
   },
+};
+
+// Moteur (Lot 7) : moteur trouve sur la machine, candidats ecartes et
+// telechargement de la release officielle (empreinte verifiee par le serveur).
+export type EngineCandidate = { path: string; source: string; reason: string };
+export type EngineDownload = {
+  status: 'idle' | 'downloading' | 'verifying' | 'installing' | 'done' | 'failed';
+  received: number;
+  total: number;
+  error: string | null;
+  path: string | null;
+};
+export type EngineStatus = {
+  status: 'ready' | 'absent';
+  current: { name: string; source: string; path: string; threads: number; hash_mb: number } | null;
+  rejected: EngineCandidate[];
+  error: string | null;
+  download: EngineDownload;
+  offer: { release: string; file: string; size: number; sha256: string } | null;
+};
+
+export const engineApi = {
+  get: () => request<EngineStatus>('/api/v1/engine'),
+  rescan: () => post<EngineStatus>('/api/v1/engine/rescan', {}),
+  download: () => post<EngineStatus>('/api/v1/engine/download', {}),
 };

@@ -68,6 +68,9 @@ test('reglages : valeurs proposees en etude libre et point de vue des evaluation
     await page.getByRole('button', { name: 'Enregistrer les reglages' }).click();
     await expect(page.getByText('Reglages enregistres.')).toBeVisible();
     await expect(page.getByTestId('engine-applied')).toContainText('thread');
+    // Lot 7 : le moteur de l'image est trouve (STOCKFISH_PATH), rien a telecharger.
+    await expect(page.getByTestId('engine-current')).toContainText('Stockfish 19');
+    await expect(page.getByTestId('engine-download')).toHaveCount(0);
 
     await page.goto(`/#/study/${await positionId(page, KEYS_FEN)}`);
     await expect(page.getByLabel('Profondeur cible')).toHaveValue('12');

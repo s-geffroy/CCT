@@ -44,7 +44,8 @@ def board_key(fen: str) -> str:
 def cache_key(context_key: str, engine: dict, settings: dict, path: list[str] | None = None) -> str:
     payload = {
         "context": context_key,
-        "engine": [engine.get("name"), engine.get("build", {}).get("net_sha256"), engine.get("threads"), engine.get("hash_mb")],
+        "engine": [engine.get("name"), (engine.get("build") or {}).get("net_sha256") or (engine.get("build") or {}).get("binary_sha256"),
+                   engine.get("threads"), engine.get("hash_mb")],
         "target_depth": settings["target_depth"],
         "multipv_max": settings["multipv_max"],
         "policy": ANALYSIS_POLICY_VERSION,

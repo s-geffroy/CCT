@@ -18,6 +18,7 @@ pytestmark = requires_engine
 def _analyse(fen: str, **kwargs):
     async def go():
         manager = EngineManager(replace(get_settings(), stockfish_path=STOCKFISH, engine_threads=1, engine_hash_mb=16))
+        await manager.locate(None)
         await manager.start()
         assert manager.info is not None, manager.last_error
         try:

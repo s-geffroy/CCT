@@ -5,7 +5,7 @@ import { settingsApi, type EngineScore, type SettingsValues, type SettingsView }
 import { formatScore } from '../analysis/format';
 
 export const DEFAULT_VALUES: SettingsValues = {
-  engine_threads: 2, engine_hash_mb: 128, study_depth: 21, study_multipv: 20, study_budget_s: 300,
+  engine_threads: 2, engine_hash_mb: 128, engine_path: '', study_depth: 21, study_multipv: 20, study_budget_s: 300,
   reference_depth: 21, reference_budget_s: 300, tree_budget_s: 300, tree_max_nodes: 80, tree_node_depth: 21,
   tree_node_budget_s: 30, tree_auto_max_ply: 4, score_perspective: 'white',
 };

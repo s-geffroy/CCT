@@ -64,7 +64,8 @@ services:
       - internal
     read_only: true
     tmpfs:
-      - /tmp
+      # exec : les tests lancent de faux moteurs UCI ecrits dans tmp_path.
+      - /tmp:exec
     security_opt:
       - no-new-privileges:true
     deploy:

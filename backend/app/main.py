@@ -12,12 +12,14 @@ from starlette.staticfiles import StaticFiles
 
 from . import backup
 from .api.analysis import router as analysis_router
+from .api.engine import router as engine_router
 from .api.library import router as library_router
 from .api.reference import router as reference_router
 from .api.settings import router as settings_router
 from .api.routes import router
 from .api.sessions import router as sessions_router
 from .domain.errors import DomainError
+from .engine.download import DownloadState
 from .engine.scheduler import Scheduler
 from .engine.uci import EngineManager
 from .persistence.db import Database
@@ -55,6 +57,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # Le serveur reste joignable : /ready signale la base indisponible.
             log.error("base indisponible : %s: %s", type(exc).__name__, exc)
         if settings.engine_enabled:
+            # Lot 7 : moteur choisi par l'utilisateur, impose (Docker), trouve sur la
+            # machine ou deja telecharge ; sinon propose au telechargement.
+            await app.state.engine.locate(app.state.prefs["engine_path"] or None)
             await app.state.engine.start()
             await app.state.scheduler.start()
         else:
@@ -68,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Chess Calculation Trainer", version=APP_VERSION, lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = EngineManager(settings)
+    app.state.engine_download = DownloadState()
     app.state.db = Database(settings.data_dir / "app.sqlite")
     app.state.scheduler = Scheduler(app.state.db, app.state.engine, max_queued=settings.max_queued_jobs)
     app.state.analysis = AnalysisService(settings, app.state.engine, app.state.scheduler)
@@ -113,6 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(analysis_router)
     app.include_router(reference_router)
     app.include_router(settings_router)
+    app.include_router(engine_router)
     _mount_static(app, settings.static_dir)
     return app
 
