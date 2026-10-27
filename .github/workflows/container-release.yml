@@ -49,16 +49,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Hors PowerShell Gallery (versions et empreintes figees, meme script que le
+      # conteneur pwsh du VPS) : la galerie peut etre indisponible.
       - name: Modules epingles
         shell: powershell
-        run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
-          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+        run: .\packaging\windows\tests\install-test-modules.ps1 -Destination "$env:RUNNER_TEMP\modules"
       - name: Analyse et tests (Windows PowerShell 5.1)
         shell: powershell
         run: |
+          $env:PSModulePath = "$env:RUNNER_TEMP\modules;" + $env:PSModulePath
           Import-Module Pester -RequiredVersion 5.7.1
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
           & .\packaging\windows\tests\run.ps1
           exit $LASTEXITCODE
 
