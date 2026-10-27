@@ -23,6 +23,10 @@ import { RetainedPanel } from './features/positions/RetainedPanel';
 import { StudyView } from './features/analysis/StudyView';
 import { HistoryView } from './features/training/HistoryView';
 import { TrainingView } from './features/training/TrainingView';
+import { SettingsView } from './features/settings/SettingsView';
+import { PrefsProvider } from './features/settings/prefs';
+import { EngineBanner } from './components/EngineBanner';
+import { Toaster } from '@/components/ui/sonner';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 type Tab = 'fen' | 'pgn' | 'editor' | 'retained';
@@ -150,15 +154,29 @@ function PositionsModule({ onTrain, onStudy }: {
 
   return (
     <>
-      <nav role="tablist" aria-label="Source de la position">
+      <div role="tablist" aria-label="Source de la position" className="tabs-list mb-3"
+           onKeyDown={(e) => {
+             // Fleches gauche/droite entre onglets (motif ARIA « tabs »).
+             const order: Tab[] = ['fen', 'pgn', 'editor'];
+             const i = order.indexOf(tab);
+             if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+               e.preventDefault();
+               const next = order[(Math.max(0, i) + (e.key === 'ArrowRight' ? 1 : 2)) % 3];
+               setTab(next);
+               document.getElementById(`tab-${next}`)?.focus();
+             }
+           }}>
         {(['fen', 'pgn', 'editor'] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} type="button" onClick={() => setTab(t)}>
+          <button key={t} id={`tab-${t}`} role="tab" type="button" className="tab plain" aria-selected={tab === t}
+                  aria-controls="source-panel" tabIndex={tab === t || (tab === 'retained' && t === 'fen') ? 0 : -1}
+                  onClick={() => setTab(t)}>
             {{ fen: 'FEN', pgn: 'PGN', editor: 'Editeur' }[t]}
           </button>
         ))}
-      </nav>
+      </div>
       {error && <p role="alert" className="error">{error}</p>}
 
+      <div id="source-panel" role="tabpanel" aria-label="Source de la position choisie">
       {tab === 'editor' ? (
         <PositionEditor
           initialFen={displayedFen}
@@ -234,6 +252,7 @@ function PositionsModule({ onTrain, onStudy }: {
           </section>
         </div>
       )}
+      </div>
 
       <div className="library">
         <RetainedPanel position={retained} displayedFen={displayedFen} onShow={() => setTab('retained')} onTrain={onTrain} onStudy={onStudy} />
@@ -250,7 +269,7 @@ function PositionsModule({ onTrain, onStudy }: {
   );
 }
 
-type Route = { view: 'positions' } | { view: 'history' } | { view: 'session'; id: string } | { view: 'study'; id: string };
+type Route = { view: 'positions' } | { view: 'history' } | { view: 'settings' } | { view: 'session'; id: string } | { view: 'study'; id: string };
 
 function parseRoute(hash: string): Route {
   const m = /^#\/session\/([0-9a-f-]{36})$/.exec(hash);
@@ -258,6 +277,7 @@ function parseRoute(hash: string): Route {
   const study = /^#\/study\/([0-9a-f-]{36})$/.exec(hash);
   if (study) return { view: 'study', id: study[1] };
   if (hash === '#/history') return { view: 'history' };
+  if (hash === '#/settings') return { view: 'settings' };
   return { view: 'positions' };
 }
 
@@ -266,8 +286,10 @@ export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
   const [error, setError] = useState<string | null>(null);
 
+  // Relu a chaque changement de vue : les reglages du moteur ont pu changer.
+  useEffect(() => { api.meta().then(setMeta).catch(() => setMeta(null)); }, [route]);
+
   useEffect(() => {
-    api.meta().then(setMeta).catch(() => setMeta(null));
     const onHash = () => setRoute(parseRoute(window.location.hash));
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -288,8 +310,9 @@ export function App() {
   }
 
   return (
-    <main className="app">
-      <header>
+    <PrefsProvider>
+    <div className="app">
+      <header className="app-header">
         <h1>Chess Calculation Trainer</h1>
         <p className="meta">
           {meta?.engine ? `${meta.engine.name} · ${meta.engine.threads} thread(s) · ${meta.engine.hash_mb} Mo` : 'moteur indisponible'}
@@ -299,13 +322,20 @@ export function App() {
           {route.view === 'session' && <a href={`#/session/${route.id}`} aria-current="page">Seance</a>}
           {route.view === 'study' && <a href={`#/study/${route.id}`} aria-current="page">Etude</a>}
           <a href="#/history" aria-current={route.view === 'history' ? 'page' : undefined}>Historique</a>
+          <a href="#/settings" aria-current={route.view === 'settings' ? 'page' : undefined}>Reglages</a>
         </nav>
       </header>
+      <main>
+      <EngineBanner />
       {error && <p role="alert" className="error">{error}</p>}
       {route.view === 'positions' && <PositionsModule onTrain={train} onStudy={(p) => go(`#/study/${p.id}`)} />}
       {route.view === 'history' && <HistoryView onOpen={(id) => go(`#/session/${id}`)} />}
       {route.view === 'session' && <TrainingView key={route.id} sessionId={route.id} onExit={() => go('#/positions')} />}
       {route.view === 'study' && <StudyView key={route.id} positionId={route.id} />}
-    </main>
+      {route.view === 'settings' && <SettingsView />}
+      </main>
+      <Toaster position="bottom-right" />
+    </div>
+    </PrefsProvider>
   );
 }

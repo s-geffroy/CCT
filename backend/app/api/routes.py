@@ -60,7 +60,7 @@ async def meta(request: Request) -> dict:
         "capabilities": {
             "variants": ["standard"],
             "multipv_max": 20,
-            "target_depth_default": 21,
+            "target_depth_default": request.app.state.prefs["study_depth"],
         },
     }
 

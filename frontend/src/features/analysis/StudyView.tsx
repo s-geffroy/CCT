@@ -8,6 +8,7 @@ import { AnalysisPanel, type ShownPosition } from './AnalysisPanel';
 import { useJobStream } from './useJobStream';
 import { ReferenceTreeView } from '../reference/ReferenceTreeView';
 import { isBuilding, useTree } from '../reference/useTree';
+import { usePrefs } from '../settings/prefs';
 
 function message(err: unknown): string {
   return err instanceof ApiFailure ? `${err.error.message} (${err.error.code})` : 'Erreur inattendue.';
@@ -18,7 +19,13 @@ export function StudyView({ positionId }: { positionId: string }) {
   const [initial, setInitial] = useState<AnalysisJob | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [settings, setSettings] = useState({ target_depth: 21, multipv_max: 20, budget_s: 300 });
+  const { values: prefs } = usePrefs();
+  const fromPrefs = () => ({ target_depth: prefs.study_depth, multipv_max: prefs.study_multipv, budget_s: prefs.study_budget_s });
+  const [settings, setSettingsState] = useState(fromPrefs);
+  const [touched, setTouched] = useState(false);
+  const setSettings = (next: typeof settings) => { setTouched(true); setSettingsState(next); };
+  // Reglages charges apres l'ouverture de la vue : ne jamais ecraser une saisie.
+  useEffect(() => { if (!touched) setSettingsState(fromPrefs()); }, [prefs.study_depth, prefs.study_multipv, prefs.study_budget_s]);
   const [shown, setShown] = useState<ShownPosition | null>(null);
   const [orientation, setOrientation] = useState<'white' | 'black'>('white');
   const job = useJobStream(jobId, initial);

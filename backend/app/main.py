@@ -13,6 +13,7 @@ from starlette.staticfiles import StaticFiles
 from .api.analysis import router as analysis_router
 from .api.library import router as library_router
 from .api.reference import router as reference_router
+from .api.settings import router as settings_router
 from .api.routes import router
 from .api.sessions import router as sessions_router
 from .domain.errors import DomainError
@@ -20,6 +21,7 @@ from .engine.scheduler import Scheduler
 from .engine.uci import EngineManager
 from .persistence.db import Database
 from .log import get_logger, setup_logging
+from .preferences import Preferences
 from .services import AnalysisService, ReferenceService
 from .settings import APP_VERSION, Settings, get_settings
 
@@ -41,6 +43,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             version = app.state.db.migrate()
             log.info("base prete : schema v%d, journal %s", version, app.state.db.journal_mode)
+            with app.state.db.session() as conn:
+                app.state.prefs.load(conn)
+            app.state.engine.threads = app.state.prefs["engine_threads"]
+            app.state.engine.hash_mb = app.state.prefs["engine_hash_mb"]
         except Exception as exc:
             # Le serveur reste joignable : /ready signale la base indisponible.
             log.error("base indisponible : %s: %s", type(exc).__name__, exc)
@@ -61,7 +67,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = Database(settings.data_dir / "app.sqlite")
     app.state.scheduler = Scheduler(app.state.db, app.state.engine, max_queued=settings.max_queued_jobs)
     app.state.analysis = AnalysisService(settings, app.state.engine, app.state.scheduler)
-    app.state.reference = ReferenceService(app.state.db, app.state.analysis)
+    app.state.prefs = Preferences(settings)
+    app.state.reference = ReferenceService(app.state.db, app.state.analysis, app.state.prefs)
     app.state.scheduler.on_finished.append(app.state.reference.on_job_finished)
     app.state.scheduler.on_idle.append(app.state.reference.on_idle)
 
@@ -101,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sessions_router)
     app.include_router(analysis_router)
     app.include_router(reference_router)
+    app.include_router(settings_router)
     _mount_static(app, settings.static_dir)
     return app
 

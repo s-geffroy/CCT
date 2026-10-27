@@ -35,15 +35,15 @@ class EngineUnavailable(DomainError):
     status_code = 503
 
 
-def default_settings(settings) -> dict:
-    """Analyse racine de la reference d'une seance."""
-    return {"target_depth": settings.reference_depth, "multipv_max": 20, "budget_s": settings.reference_budget_s}
+def default_settings(prefs) -> dict:
+    """Analyse racine de la reference d'une seance (reglages courants)."""
+    return {"target_depth": prefs["reference_depth"], "multipv_max": 20, "budget_s": prefs["reference_budget_s"]}
 
 
-def tree_defaults(settings) -> policy.TreeSettings:
-    return policy.TreeSettings(budget_s=settings.tree_budget_s, max_nodes=settings.tree_max_nodes,
-                               node_depth=settings.tree_node_depth, node_budget_s=settings.tree_node_budget_s,
-                               auto_max_ply=settings.tree_auto_max_ply)
+def tree_defaults(prefs) -> policy.TreeSettings:
+    return policy.TreeSettings(budget_s=prefs["tree_budget_s"], max_nodes=prefs["tree_max_nodes"],
+                               node_depth=prefs["tree_node_depth"], node_budget_s=prefs["tree_node_budget_s"],
+                               auto_max_ply=prefs["tree_auto_max_ply"])
 
 
 class AnalysisService:
@@ -78,10 +78,10 @@ class AnalysisService:
 
 
 class ReferenceService:
-    def __init__(self, db: Database, analysis: AnalysisService):
+    def __init__(self, db: Database, analysis: AnalysisService, prefs):
         self.db = db
         self.analysis = analysis
-        self.defaults = tree_defaults(analysis.settings)
+        self.prefs = prefs  # reglages lus a chaque nouvel arbre
         # Un seul processus : un verrou suffit a serialiser les avancees d'arbre
         # (routes et planificateur les declenchent depuis des threads differents).
         self._lock = threading.RLock()
@@ -93,7 +93,7 @@ class ReferenceService:
         position = repo.get_position(conn, position_id)
         tree_id = reference_repo.create_tree(
             conn, position_id=position_id, session_id=session_id, root_job=root_job, root_fen=position["fen"],
-            settings=(settings or self.defaults).to_dict())
+            settings=(settings or tree_defaults(self.prefs)).to_dict())
         self.advance(tree_id)
         return tree_id
 

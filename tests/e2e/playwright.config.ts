@@ -20,5 +20,8 @@ export default defineConfig({
   projects: [
     { name: 'desktop-1280', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } } },
     { name: 'laptop-1024', use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 } } },
+    // Mobile (tactile, 412 px) : parcours etiquetes @mobile seulement ; le glisser-deposer
+    // y est remplace par la saisie SAN, comme le ferait un joueur sur telephone.
+    { name: 'mobile-pixel7', use: { ...devices['Pixel 7'] }, grep: /@mobile/ },
   ],
 });

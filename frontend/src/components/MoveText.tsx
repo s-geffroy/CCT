@@ -70,9 +70,36 @@ export function MoveText({ nodes, rootId, selectedNodeId, onSelect, onLoadMore }
     );
   }
   return (
-    <div className="movetext" aria-label="Partie et variantes">
+    <div className="movetext" aria-label="Partie et variantes" role="group" tabIndex={0}
+         aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Home"
+         title="Fleches : droite coup suivant, gauche coup precedent, haut et bas variantes soeurs"
+         onKeyDown={(e) => {
+           const target = keyTarget(nodes, rootId, selectedNodeId, e.key);
+           if (target === undefined) return;
+           e.preventDefault();
+           onSelect(target);
+         }}>
       {root.comment && <p className="comment">{root.comment}</p>}
       {renderLine(root.children[0], 0)}
     </div>
   );
+}
+
+/** Navigation au clavier dans un arbre de coups : droite = suite principale,
+ *  gauche = coup precedent, haut/bas = variante soeur, Debut = racine.
+ *  `undefined` : touche sans effet (la page garde son comportement). */
+export function keyTarget(nodes: Record<string, PgnNode>, rootId: string, selected: string | null, key: string): string | undefined {
+  const current = nodes[selected ?? rootId] ?? nodes[rootId];
+  if (!current) return undefined;
+  const parent = current.parent_id ? nodes[current.parent_id] : undefined;
+  const siblings = parent ? parent.children.filter((id) => nodes[id]) : [];
+  const index = siblings.indexOf(current.id);
+  switch (key) {
+    case 'ArrowRight': return current.children.find((id) => nodes[id]);
+    case 'ArrowLeft': return parent ? parent.id : undefined;
+    case 'ArrowDown': return index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : undefined;
+    case 'ArrowUp': return index > 0 ? siblings[index - 1] : undefined;
+    case 'Home': return rootId;
+    default: return undefined;
+  }
 }

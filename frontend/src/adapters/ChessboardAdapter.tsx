@@ -7,8 +7,10 @@
 //  - aucune boite de promotion integree : on la fournit ici, jamais de dame
 //    implicite.
 //  - aucune option de navigation clavier : la saisie SAN textuelle reste le
-//    chemin accessible (a traiter au Lot 5).
-import { useState } from 'react';
+//    chemin accessible ; les pieces sont nommees pour les lecteurs d'ecran
+//    (`boardA11y`), la bibliotheque ne le fait pas.
+import { useRef, useState } from 'react';
+import { useAccessiblePieces } from './boardA11y';
 import { Chessboard, type ChessboardOptions, type PieceDropHandlerArgs } from 'react-chessboard';
 
 export type BoardMode = 'locked' | 'play';
@@ -36,6 +38,8 @@ export function isPromotionDrop(pieceType: string, target: string): boolean {
 
 export function ChessboardAdapter({ fen, orientation = 'white', mode, lastMove, onMove, id = 'board' }: ChessboardAdapterProps) {
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
+  const container = useRef<HTMLDivElement>(null);
+  useAccessiblePieces(container);
 
   const handleDrop = ({ piece, sourceSquare, targetSquare }: PieceDropHandlerArgs): boolean => {
     if (mode !== 'play' || !targetSquare || targetSquare === sourceSquare) return false;
@@ -66,7 +70,7 @@ export function ChessboardAdapter({ fen, orientation = 'white', mode, lastMove, 
   };
 
   return (
-    <div className="board" data-mode={mode}>
+    <div className="board" data-mode={mode} ref={container}>
       <Chessboard options={options} />
       {pendingPromotion && (
         <div role="dialog" aria-label="Choisir la piece de promotion" className="promotion">

@@ -50,6 +50,11 @@ les labels a la main.
   preuve qu'exacte et a profondeur >= `min_verdict_depth`. Tout changement de
   seuil change `POLICY["version"]` et passe par le corpus
   (`backend/tests/corpus/positions.json`, un test par cas).
+- Reglages (`preferences.py`) : bornes et validation cote serveur uniquement ;
+  tout nouveau reglage y est declare (cle, groupe, bornes) et l'interface les
+  lit depuis `GET /api/v1/settings`.
+- Interface : composants shadcn dans `frontend/src/components/ui/` ; tout
+  nouvel ecran passe le test axe-core (`tests/e2e/specs/ux.spec.ts`).
 
 ## Services Compose
 

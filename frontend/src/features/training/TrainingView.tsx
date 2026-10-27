@@ -18,6 +18,12 @@ import { useJobStream } from '../analysis/useJobStream';
 import { ReferenceTreeView } from '../reference/ReferenceTreeView';
 import { useTree } from '../reference/useTree';
 import { ReviewPanel } from '../review/ReviewPanel';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 export const ASSESSMENT_LABEL: Record<Assessment, string> = {
   white_better: 'avantage blanc',
@@ -139,7 +145,7 @@ export function TrainingView({ sessionId, onExit }: Props) {
     <section className="training" aria-label="Seance d'entrainement">
       <header className="training-head">
         <h2>{s.mode === 'mental' ? 'Calcul mental (B)' : 'Arbre personnel (C)'}</h2>
-        <span className="badge" data-testid="session-state">{STATE_LABEL[s.state]}</span>
+        <Badge variant="secondary" data-testid="session-state">{STATE_LABEL[s.state]}</Badge>
         {active && (
           <label className="timer-toggle">
             <input type="checkbox" checked={showTimer} onChange={(e) => setShowTimer(e.target.checked)} /> chronometre
@@ -254,15 +260,23 @@ export function TrainingView({ sessionId, onExit }: Props) {
               <button type="button" className="primary" onClick={async () => { await saveNotes(); setFinishing(true); }}>
                 {s.mode === 'mental' ? "J'ai termine" : 'Terminer mon calcul'}
               </button>
-              {!confirmAbandon ? (
-                <button type="button" onClick={() => setConfirmAbandon(true)}>Abandonner la seance</button>
-              ) : (
-                <span role="group" aria-label="Confirmer l'abandon">
-                  Abandonner ? La seance ne pourra plus etre soumise.{' '}
-                  <button type="button" onClick={() => act(() => api.abandon(s), () => setConfirmAbandon(false))}>Oui, abandonner</button>
-                  <button type="button" onClick={() => setConfirmAbandon(false)}>Non</button>
-                </span>
-              )}
+              <AlertDialog open={confirmAbandon} onOpenChange={setConfirmAbandon}>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" variant="outline" size="sm">Abandonner la seance</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Abandonner la seance ?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      La seance ne pourra plus etre soumise ni revelee. Vos coups et notes restent consultables dans l'historique.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Non, continuer</AlertDialogCancel>
+                    <AlertDialogAction variant="destructive" onClick={() => act(() => api.abandon(s))}>Oui, abandonner</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           )}
 

@@ -3,6 +3,13 @@
   "private": true,
   "license": "GPL-3.0-or-later",
   "type": "module",
-  "scripts": { "test": "playwright test" },
-  "devDependencies": { "@playwright/test": "1.64.0" }
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "4.13.0"
+  }
 }

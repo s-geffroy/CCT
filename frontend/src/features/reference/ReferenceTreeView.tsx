@@ -3,7 +3,8 @@
 // « mauvais ». Ne recoit que des arbres visibles (filtrage cote serveur).
 import { useMemo, useState } from 'react';
 import { ApiFailure, type ReferenceNode, type SelectionReason, type NodeStatus, type VisibleTree } from '../../api/client';
-import { formatScore, numberedLine } from '../analysis/format';
+import { numberedLine } from '../analysis/format';
+import { useScore } from '../settings/prefs';
 import type { ShownPosition } from '../analysis/AnalysisPanel';
 
 export const REASON_LABEL: Record<SelectionReason, string> = {
@@ -44,6 +45,7 @@ type Props = {
 export function ReferenceTreeView({ tree, rootFen, onShow, onExpand }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const score = useScore();
   const byId = useMemo(() => Object.fromEntries(tree.nodes.map((n) => [n.id, n])), [tree.nodes]);
   const children = useMemo(() => {
     const out: Record<string, ReferenceNode[]> = {};
@@ -87,7 +89,7 @@ export function ReferenceTreeView({ tree, rootFen, onShow, onExpand }: Props) {
         </button>
         <span className={`tag reason-${node.selection_reason}`}>{REASON_LABEL[node.selection_reason]}</span>
         <span className={`tag status-${node.status}`}>{STATUS_LABEL[node.status]}{node.reanalysed ? ' · reanalyse' : ''}</span>
-        {best && <span className="score" title="evaluation apres ce coup, point de vue des Blancs">{formatScore(best.score)} (prof. {best.exact_depth})</span>}
+        {best && <span className="score" title={`evaluation apres ce coup. ${score.legend}`}>{score.format(best.score, node.fen)} (prof. {best.exact_depth})</span>}
         {kids.length > 0 && <ul>{kids.map(renderNode)}</ul>}
       </li>
     );
@@ -130,7 +132,7 @@ export function ReferenceTreeView({ tree, rootFen, onShow, onExpand }: Props) {
           {selected.lines.length > 0 && (
             <div className="table-scroll">
               <table className="lines">
-                <thead><tr><th>#</th><th>Coup</th><th>Eval. (Blancs)</th><th>Prof.</th><th>Suite</th><th /></tr></thead>
+                <thead><tr><th>#</th><th>Coup</th><th title={score.legend}>{score.label}</th><th>Prof.</th><th>Suite</th><th /></tr></thead>
                 <tbody>
                   {selected.lines.map((l) => {
                     const childPath = [...selected.path_uci, l.root_move_uci];
@@ -138,7 +140,7 @@ export function ReferenceTreeView({ tree, rootFen, onShow, onExpand }: Props) {
                       <tr key={l.rank}>
                         <td>{l.rank}</td>
                         <td>{l.root_move_san ?? l.root_move_uci}</td>
-                        <td className="score">{formatScore(l.score)}</td>
+                        <td className="score">{score.format(l.score, selected.fen)}</td>
                         <td>{l.exact_depth}</td>
                         <td className="pv">{numberedLine(selected.fen, l.pv_san.slice(0, 10))}{l.pv_san.length > 10 ? ' …' : ''}</td>
                         <td>{!inTree.has(childPath.join(' ')) && (

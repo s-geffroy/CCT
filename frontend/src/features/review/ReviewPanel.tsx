@@ -9,7 +9,8 @@ import {
   type NodeVerdict,
   type Review,
 } from '../../api/client';
-import { formatScore, numberedLine } from '../analysis/format';
+import { numberedLine } from '../analysis/format';
+import { useScore } from '../settings/prefs';
 import type { ShownPosition } from '../analysis/AnalysisPanel';
 
 const POLL_MS = 3000;
@@ -56,6 +57,7 @@ type Props = {
 export function ReviewPanel({ sessionId, attempt, rootFen, onShow, refreshKey = 0 }: Props) {
   const [review, setReview] = useState<Review | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const score = useScore();
   const provisional = review?.status === 'available' && review.quality === 'provisional';
 
   useEffect(() => {
@@ -79,6 +81,8 @@ export function ReviewPanel({ sessionId, attempt, rootFen, onShow, refreshKey = 
     .filter((x) => x.verdict)
     .sort((a, b) => a.verdict.path_uci.length - b.verdict.path_uci.length || a.node.order_index - b.node.order_index);
 
+  const parentFen = (nodeId: string) => { const p = tree[nodeId]?.parent_id; return p && tree[p] ? tree[p].fen_after : rootFen; };
+
   function pathSans(nodeId: string): string[] {
     const sans: string[] = [];
     for (let id: string | null = nodeId; id && tree[id]; id = tree[id].parent_id) sans.unshift(tree[id].move_san);
@@ -99,6 +103,7 @@ export function ReviewPanel({ sessionId, attempt, rootFen, onShow, refreshKey = 
       <p className="legend">
         Une evaluation n'est une preuve que si elle est exacte et atteint la profondeur {review.policy.min_verdict_depth} ;
         une refutation exige un changement de resultat (gagnant, equilibre, perdant), pas seulement un ecart de centipions.
+        {score.perspective !== 'white' && ' Les textes des diagnostics donnent les evaluations au point de vue des Blancs ; le tableau suit votre reglage.'}
       </p>
 
       {(d.coverage || d.anticipation || d.accuracy || d.horizon || d.evaluation) && (
@@ -131,7 +136,7 @@ export function ReviewPanel({ sessionId, attempt, rootFen, onShow, refreshKey = 
         <div className="table-scroll">
           <table className="verdicts">
             <caption>Vos coups</caption>
-            <thead><tr><th>Ligne</th><th>Verdict</th><th>Eval. (Blancs)</th><th>Reference</th></tr></thead>
+            <thead><tr><th>Ligne</th><th>Verdict</th><th title={score.legend}>{score.label}</th><th>Reference</th></tr></thead>
             <tbody>
               {userNodes.map(({ node, verdict }) => (
                 <tr key={node.id} data-verdict={verdict.verdict}>
@@ -141,8 +146,8 @@ export function ReviewPanel({ sessionId, attempt, rootFen, onShow, refreshKey = 
                   })}>{numberedLine(rootFen, pathSans(node.id))}</button></td>
                   <td>{VERDICT_LABEL[verdict.verdict]}{verdict.reason ? ` (${verdict.reason})` : ''}
                     {verdict.transposition_of ? ' · transposition d\'une branche de reference' : ''}</td>
-                  <td className="score">{verdict.score ? `${formatScore(verdict.score)} (prof. ${verdict.depth})` : '—'}</td>
-                  <td>{verdict.best_move_san && verdict.best_score ? `${verdict.best_move_san} ${formatScore(verdict.best_score)}` : '—'}</td>
+                  <td className="score">{verdict.score ? `${score.format(verdict.score, parentFen(node.id))} (prof. ${verdict.depth})` : '—'}</td>
+                  <td>{verdict.best_move_san && verdict.best_score ? `${verdict.best_move_san} ${score.format(verdict.best_score, parentFen(node.id))}` : '—'}</td>
                 </tr>
               ))}
             </tbody>

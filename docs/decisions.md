@@ -96,3 +96,20 @@ Le doc 14 demande de les consigner ici.
 - **Taxonomie non implémentée telle quelle** : `evaluation_mismatch` ne compare que
   « avantage blanc / noir / égalité » ; « initiative », « attaque », « incertain » sont
   déclarés non comparables.
+
+## Lot 5 : interface
+
+- **shadcn/ui adopté** (doc 03) avec Tailwind 4 ; composants générés par le CLI
+  `shadcn@4.21.4` dans `frontend/src/components/ui/`, puis relus. Le CLI a mal résolu
+  l'alias `@/lib/utils` (imports `from "cn"`) et ajouté deux dépendances non demandées
+  (`cn`, `next-themes`) : corrigé, retirées. Versions épinglées, toutes publiées depuis
+  plus de deux semaines.
+- **Selects natifs** (`NativeSelect`) plutôt que le `Select` Radix : accessibles,
+  utilisables au doigt et pilotables par les tests.
+- **Onglets de source** : `tablist` manuel relié à un `tabpanel`, plutôt que `Tabs`
+  Radix, dont les panneaux ne collent pas au modèle « position retenue » hors onglet.
+- **Réglages** : l'environnement fixe les défauts, la base ne garde que les écarts ;
+  threads et hash s'appliquent à chaud après la recherche en cours.
+- **Mobile** : profil Pixel 7 de Playwright, parcours étiquetés `@mobile` (saisie SAN au
+  lieu du glisser-déposer tactile).
+- Thème sombre : non fait (facultatif).

@@ -367,3 +367,48 @@ export const api = {
   expand: (treeId: string, path_uci: string[]) =>
     post<ReferenceTree>(`/api/v1/reference-trees/${treeId}/expand`, { path_uci }),
 };
+
+export type SettingField = {
+  key: string;
+  group: 'moteur' | 'etude' | 'seance' | 'arbre' | 'affichage';
+  label: string;
+  default: number | string;
+  minimum?: number;
+  maximum?: number;
+  unit?: string | null;
+  choices?: string[];
+};
+
+export type SettingsValues = {
+  engine_threads: number;
+  engine_hash_mb: number;
+  study_depth: number;
+  study_multipv: number;
+  study_budget_s: number;
+  reference_depth: number;
+  reference_budget_s: number;
+  tree_budget_s: number;
+  tree_max_nodes: number;
+  tree_node_depth: number;
+  tree_node_budget_s: number;
+  tree_auto_max_ply: number;
+  score_perspective: 'white' | 'side_to_move';
+};
+
+export type SettingsView = {
+  values: SettingsValues;
+  fields: SettingField[];
+  engine: { applied: { threads: number; hash_mb: number } | null; pending: { threads: number; hash_mb: number } | null };
+};
+
+export const settingsApi = {
+  get: () => request<SettingsView>('/api/v1/settings'),
+  put: (patch: Partial<SettingsValues> & { reset?: boolean }) =>
+    request<SettingsView>('/api/v1/settings', { method: 'PUT', body: JSON.stringify(patch) }),
+  ready: async (): Promise<{ engine: boolean; database: boolean } | null> => {
+    const res = await fetch('/api/v1/health/ready').catch(() => null);
+    if (!res) return null;
+    const body = await res.json().catch(() => null);
+    return body?.checks ?? null;
+  },
+};

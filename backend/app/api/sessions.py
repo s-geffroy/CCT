@@ -147,7 +147,7 @@ def _start_reference(request: Request, conn: sqlite3.Connection, row: sqlite3.Ro
     try:
         job, _ = enqueue(request, conn, position_id=row["position_id"], session_id=row["id"],
                          purpose="initial_reference", priority=PRIORITY_SESSION_REFERENCE,
-                         settings=default_settings(request.app.state.settings))
+                         settings=default_settings(request.app.state.prefs))
     except DomainError as exc:
         # Pas de reference (position terminale, file pleine...) : la seance reste possible.
         log.warning("seance %s : reference non lancee (%s)", row["id"][:8], exc.code)

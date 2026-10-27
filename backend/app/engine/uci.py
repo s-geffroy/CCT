@@ -43,6 +43,10 @@ class EngineManager:
         self._engine: chess.engine.UciProtocol | None = None
         self.info: EngineInfo | None = None
         self.last_error: str | None = None
+        # Reglages courants (modifiables depuis l'interface, cf. `apply`).
+        self.threads = settings.engine_threads
+        self.hash_mb = settings.engine_hash_mb
+        self.pending: dict | None = None  # reglage demande, pas encore applique
 
     @property
     def engine(self) -> chess.engine.UciProtocol:
@@ -53,13 +57,13 @@ class EngineManager:
     async def start(self) -> None:
         try:
             _transport, engine = await chess.engine.popen_uci(self.settings.stockfish_path)
-            await engine.configure({"Threads": self.settings.engine_threads, "Hash": self.settings.engine_hash_mb})
+            await engine.configure({"Threads": self.threads, "Hash": self.hash_mb})
             self._engine = engine
             self.info = EngineInfo(
                 name=engine.id.get("name", "inconnu"),
                 author=engine.id.get("author", ""),
-                threads=self.settings.engine_threads,
-                hash_mb=self.settings.engine_hash_mb,
+                threads=self.threads,
+                hash_mb=self.hash_mb,
                 build=read_build_info(self.settings.stockfish_build_info),
             )
             self.last_error = None
@@ -96,3 +100,23 @@ class EngineManager:
             self.last_error = f"{type(exc).__name__}: {exc}"
             log.error("moteur sans reponse : %s", self.last_error)
             return False
+
+    async def apply(self, threads: int, hash_mb: int) -> None:
+        """Nouveaux threads/hash. Pris sous `lock` : s'applique apres la
+        recherche en cours, jamais au milieu. L'identite du moteur (cle de
+        cache) change avec eux : aucun resultat n'est confondu."""
+        if (threads, hash_mb) == (self.threads, self.hash_mb) and self.pending is None:
+            return
+        self.pending = {"threads": threads, "hash_mb": hash_mb}
+        async with self.lock:
+            self.threads, self.hash_mb = threads, hash_mb
+            if self._engine is not None and self.info is not None:
+                try:
+                    await self._engine.configure({"Threads": threads, "Hash": hash_mb})
+                    self.info.threads, self.info.hash_mb = threads, hash_mb
+                    log.info("moteur reconfigure : threads=%d, hash=%d Mo", threads, hash_mb)
+                except Exception as exc:
+                    log.error("reconfiguration du moteur impossible (%r) ; redemarrage", exc)
+                    await self.restart()
+            if self.pending == {"threads": threads, "hash_mb": hash_mb}:
+                self.pending = None

@@ -1,7 +1,8 @@
 // Editeur de position : echiquier + pieces libres (SparePiece de react-chessboard,
 // qui exige un ChessboardProvider commun). La FEN produite est validee par le
 // serveur ; le client ne juge pas la legalite.
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useAccessiblePieces } from '../adapters/boardA11y';
 import {
   Chessboard,
   ChessboardProvider,
@@ -51,6 +52,8 @@ export type EditorProps = { initialFen: string; onSubmit: (fen: string) => void 
 export function PositionEditor({ initialFen, onSubmit }: EditorProps) {
   const [position, setPosition] = useState<PositionDataType>(() => fenStringToPositionObject(initialFen, 8, 8));
   const [turn, setTurn] = useState<'w' | 'b'>('w');
+  const editorRef = useRef<HTMLDivElement>(null);
+  useAccessiblePieces(editorRef);
   const [castling, setCastling] = useState('KQkq');
   const [ep, setEp] = useState('-');
 
@@ -72,10 +75,14 @@ export function PositionEditor({ initialFen, onSubmit }: EditorProps) {
 
   return (
     <ChessboardProvider options={options}>
-      <div className="editor">
-        <div className="spares" aria-label="Pieces noires">{BLACK.map((t) => <SparePiece key={t} pieceType={t} />)}</div>
-        <Chessboard />
-        <div className="spares" aria-label="Pieces blanches">{WHITE.map((t) => <SparePiece key={t} pieceType={t} />)}</div>
+      <div className="editor" ref={editorRef}>
+        <div className="editor-board">
+          <div className="spares" aria-label="Pieces noires">{BLACK.map((t) => <SparePiece key={t} pieceType={t} />)}</div>
+          <Chessboard />
+          <div className="spares" aria-label="Pieces blanches">{WHITE.map((t) => <SparePiece key={t} pieceType={t} />)}</div>
+        </div>
+        <div className="editor-side">
+        <p className="text-sm text-muted-foreground">Glissez les pieces depuis les reserves ; hors de l'echiquier pour les retirer.</p>
         <fieldset>
           <legend>Contexte de la position</legend>
           <label>
@@ -93,9 +100,10 @@ export function PositionEditor({ initialFen, onSubmit }: EditorProps) {
           </label>
           <button type="button" onClick={() => setPosition({})}>Vider</button>
           <button type="button" onClick={() => setPosition(fenStringToPositionObject(initialFen, 8, 8))}>Reinitialiser</button>
-          <button type="button" onClick={() => onSubmit(fen)}>Valider cette position</button>
+          <button type="button" className="primary" onClick={() => onSubmit(fen)}>Valider cette position</button>
         </fieldset>
         <code className="fen">{fen}</code>
+        </div>
       </div>
     </ChessboardProvider>
   );

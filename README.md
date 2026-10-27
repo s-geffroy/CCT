@@ -13,6 +13,7 @@ Aucune promesse d'exhaustivite : jusqu'a 20 premiers coups, profondeur cible
 - Rapport du Lot 2 (seances B/C, immuabilite, anti-spoiler) : `docs/lot2-report.md`
 - Rapport du Lot 3 (orchestrateur Stockfish, SSE, etude libre) : `docs/lot3-report.md`
 - Rapport du Lot 4 (arbre de reference ramifie, debriefing, corpus) : `docs/lot4-report.md`
+- Rapport du Lot 5 (UX, accessibilite, reglages, mobile) : `docs/lot5-report.md`
 
 Cible finale : Windows 11 x64 + Docker Desktop/WSL 2, image GHCR
 `linux/amd64` et installation par double-clic (Lot 6). **Ce VPS sert au
@@ -26,7 +27,7 @@ developpement et aux tests uniquement** : aucun port publie.
 | `backend/tests/corpus/` | corpus annote de 21 positions (DoD du Lot 4), versionne |
 | `backend/tests/` | pytest, dont integration avec le vrai Stockfish |
 | `backend/Dockerfile` | multi-stage : `stockfish` (sf_19 universal), `frontend`, `pydeps`, `runtime`, `test`, `devtools` |
-| `frontend/` | React 19 + TypeScript + Vite ; `react-chessboard`, `react-arborist` via adaptateurs |
+| `frontend/` | React 19 + TypeScript + Vite + Tailwind 4/shadcn-ui (`src/components/ui`, generes puis relus) ; `react-chessboard`, `react-arborist` via adaptateurs |
 | `tests/e2e/` | Playwright (Chromium reel, 1280 et 1024 px) contre le service `app` |
 | `compose.yaml` | stack du VPS (`app`, `tests`, `e2e`, `devtools`) |
 
