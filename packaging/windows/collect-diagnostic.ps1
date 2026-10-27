@@ -5,6 +5,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'common.ps1')
+# Sorties de docker et wsl en UTF-8 (sinon les caracteres speciaux sont mal decodes dans le rapport).
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { Write-Verbose 'console sans encodage modifiable' }
 
 $appRoot = Get-AppRoot
 $lines = New-Object System.Collections.Generic.List[string]

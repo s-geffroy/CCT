@@ -57,7 +57,8 @@ def verify(path: Path) -> dict:
 def create(data_dir: Path) -> dict:
     source = data_dir / "app.sqlite"
     if not source.is_file():
-        return {"ok": False, "reason": "aucune base a sauvegarder"}
+        # Premiere utilisation : rien a perdre, la mise a jour peut continuer.
+        return {"ok": True, "skipped": True, "reason": "aucune base : rien a sauvegarder", "sessions": 0}
     target = data_dir / "backups" / f"cct-{_stamp()}.sqlite"
     conn = sqlite3.connect(source)
     try:

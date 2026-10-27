@@ -253,6 +253,8 @@ Describe 'Invoke-AppBackup' {
     It 'sauvegarde dans le conteneur, refuse un resultat non verifie, copie sur le PC' {
         $app = Join-Path $TestDrive 'app'
         New-Item -ItemType Directory -Path $app -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $app '.env') -Value 'HOST_PORT=8765'
+        Mock Wait-App { 'ready' }
         Mock Test-AppRunning { $true }
         Mock Invoke-Compose {
             if ($Arguments[0] -eq 'exec') { 'log ignore'; '{"ok": true, "path": "/data/backups/cct-1.sqlite", "sessions": 3, "schema_version": 4}' }
@@ -340,5 +342,34 @@ Describe 'Rapport de diagnostic' {
         $text = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'collect-diagnostic.ps1') -Raw
         $text | Should -Match '\$reportDir = \$env:USERPROFILE'
         $text | Should -Not -Match "GetFolderPath\('Desktop'\)"
+    }
+}
+
+Describe 'Invoke-AppBackup (premiere utilisation et demarrage)' {
+    BeforeEach {
+        $script:app = Join-Path $TestDrive 'app2'
+        New-Item -ItemType Directory -Path $script:app -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:app '.env') -Value 'HOST_PORT=8765'
+    }
+    It 'application arretee : demarrage, attente qu elle soit prete, PUIS sauvegarde' {
+        $script:order = New-Object System.Collections.Generic.List[string]
+        Mock Test-AppRunning { $false }
+        Mock Wait-App { $script:order.Add('attente'); 'ready' }
+        Mock Invoke-Compose {
+            $script:order.Add($Arguments[0])
+            if ($Arguments[0] -eq 'exec') { '{"ok": true, "skipped": true, "reason": "aucune base", "sessions": 0}' }
+        }
+        $r = Invoke-AppBackup $script:app
+        ($script:order -join ',') | Should -Be 'up,attente,exec'
+        $r.Path | Should -BeNullOrEmpty
+        Should -Invoke Invoke-Compose -Times 0 -ParameterFilter { $Arguments[0] -eq 'cp' }
+    }
+    It 'application qui ne demarre pas : erreur claire, aucune sauvegarde tentee' {
+        Mock Test-AppRunning { $true }
+        Mock Wait-App { 'down' }
+        Mock Show-AppLogs { }
+        Mock Invoke-Compose { }
+        { Invoke-AppBackup $script:app } | Should -Throw '*ne repond pas*'
+        Should -Invoke Invoke-Compose -Times 0 -ParameterFilter { $Arguments[0] -eq 'exec' }
     }
 }

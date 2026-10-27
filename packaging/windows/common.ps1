@@ -304,11 +304,19 @@ function Test-AppRunning([string] $AppRoot) {
 function Invoke-AppBackup([string] $AppRoot) {
     # Sauvegarde coherente faite DANS le conteneur (API SQLite), verifiee, puis copiee sur le PC.
     if (-not (Test-AppRunning $AppRoot)) { Invoke-Compose $AppRoot @('up', '-d') | Out-Null }
+    # Attendre que l'application ait fini de demarrer (base creee, migrations
+    # faites) : sinon la sauvegarde part trop tot (vu sur un vrai PC, 27/10).
+    $url = 'http://127.0.0.1:' + (Get-HostPort (Read-EnvFile (Join-Path $AppRoot '.env')))
+    if ((Wait-App $url 120) -eq 'down') { Show-AppLogs $AppRoot; throw 'Sauvegarde impossible : l application ne repond pas.' }
     $raw = (Invoke-Compose $AppRoot @('exec', '-T', 'app', 'python', '-m', 'app.backup', 'create') | Out-String).Trim()
     $line = @($raw -split "`r?`n" | Where-Object { $_.StartsWith('{') }) | Select-Object -Last 1
     if (-not $line) { throw ('Sauvegarde : reponse inattendue : ' + $raw) }
     $result = $line | ConvertFrom-Json
     if (-not $result.ok) { throw ('Sauvegarde refusee : ' + $result.reason) }
+    if ($result.PSObject.Properties['skipped'] -and $result.skipped) {
+        # Aucune donnee encore : rien a sauvegarder, ce n'est pas une erreur.
+        return [pscustomobject]@{ Path = $null; Sessions = 0; Schema = $null }
+    }
     $backups = Join-Path $AppRoot 'backups'
     if (-not (Test-Path -LiteralPath $backups)) { New-Item -ItemType Directory -Path $backups -Force | Out-Null }
     $name = [System.IO.Path]::GetFileName([string]$result.path)

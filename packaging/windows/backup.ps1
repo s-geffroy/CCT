@@ -9,6 +9,7 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $appRoot '.env'))) { throw 'Application non installee : rien a sauvegarder.' }
     Assert-DockerReady
     $saved = Invoke-AppBackup $appRoot
+    if (-not $saved.Path) { Write-Host 'Aucune donnee pour l instant : rien a sauvegarder.'; exit 0 }
     Write-Host ('Sauvegarde verifiee (' + $saved.Sessions + ' seance(s), schema v' + $saved.Schema + ') :')
     Write-Host ('  ' + (Protect-Text $saved.Path))
     exit 0
