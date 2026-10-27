@@ -334,3 +334,11 @@ Describe 'Invoke-Native (programme externe reel)' {
         }
     }
 }
+
+Describe 'Rapport de diagnostic' {
+    It 'ecrit dans le dossier personnel, jamais sur le Bureau' {
+        $text = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'collect-diagnostic.ps1') -Raw
+        $text | Should -Match '\$reportDir = \$env:USERPROFILE'
+        $text | Should -Not -Match "GetFolderPath\('Desktop'\)"
+    }
+}

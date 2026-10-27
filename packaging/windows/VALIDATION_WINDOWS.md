@@ -21,7 +21,7 @@ qui était attendu (une phrase suffit). Un KO est aussi utile qu'un OK.
 | W09 | Sauvegarde et restauration | séance A, `SAUVEGARDER.cmd`, séance B, `RESTAURER.cmd` (choisir la sauvegarde) | A présente, B absente ; message « Restauration faite et vérifiée » | |
 | W10 | Désinstallation | `DESINSTALLER.cmd`, puis réinstaller | données retrouvées après réinstallation | |
 | W11 | Tests automatiques Windows | (fait par la CI GitHub : rien à faire) | job « windows-scripts » vert | |
-| W12 | Rapport du poste | `COLLECTER_DIAGNOSTIC.cmd` | fichier `cct-rapport-...txt` sur le Bureau | |
+| W12 | Rapport du poste | `COLLECTER_DIAGNOSTIC.cmd` | fichier `cct-rapport-...txt` dans le dossier personnel (`%USERPROFILE%`, par exemple `C:\Users\<nom>`) | |
 
 Mise à jour (si une nouvelle version existe) : `METTRE_A_JOUR.cmd` de la nouvelle
 version → données conservées, nouvelle version affichée en haut de l'application
@@ -35,7 +35,7 @@ version → données conservées, nouvelle version affichée en haut de l'applic
    `validation/AAAA-MM-JJ/resultats.md`, coller cette fiche remplie,
    « Commit directly to the validation-windows branch ».
 3. Ouvrir le dossier `validation/AAAA-MM-JJ/` → **Add file → Upload files** :
-   le `cct-rapport-....txt` du Bureau et vos captures d'écran.
+   le `cct-rapport-....txt` de votre dossier personnel (`%USERPROFILE%`) et vos captures d'écran.
 4. Dire dans la conversation avec Claude : « rapport déposé, dossier
    validation/AAAA-MM-JJ ».
 

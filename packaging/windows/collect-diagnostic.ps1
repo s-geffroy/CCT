@@ -1,7 +1,7 @@
 #requires -Version 5.1
-# Rapport de diagnostic (W12) : versions, etat, sante, journal. Ecrit sur le
-# Bureau un fichier texte a transmettre au projet. Aucun secret ; nom du compte,
-# du poste et chemin du profil masques. Ne s'arrete jamais sur une section en echec.
+# Rapport de diagnostic (W12) : versions, etat, sante, journal. Ecrit dans le
+# dossier personnel (%USERPROFILE%, jamais le Bureau) un fichier texte a transmettre
+# au projet. Aucun secret ; nom du compte, du poste et chemin du profil masques. Ne s'arrete jamais sur une section en echec.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'common.ps1')
@@ -60,10 +60,10 @@ Add-Section 'Sante et version' {
 Add-Section 'Journal (300 dernieres lignes)' { Invoke-Compose $appRoot @('logs', '--no-color', '--tail=300', 'app') -AllowFailure }
 
 $name = 'cct-rapport-' + (Get-Date -Format 'yyyyMMdd-HHmm') + '.txt'
-$desktop = [Environment]::GetFolderPath('Desktop')
-if (-not $desktop) { $desktop = $appRoot }
-$target = Join-Path $desktop $name
+$reportDir = $env:USERPROFILE  # pas $home : variable automatique en lecture seule
+if (-not $reportDir) { $reportDir = $appRoot }
+$target = Join-Path $reportDir $name
 [System.IO.File]::WriteAllText($target, (($lines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host ('Rapport ecrit sur le Bureau : ' + $name)
+Write-Host ('Rapport ecrit dans votre dossier personnel : %USERPROFILE%\' + $name)
 Write-Host 'Deposez-le dans le dossier validation/ de la branche validation-windows sur GitHub (voir VALIDATION_WINDOWS.md).'
 exit 0
