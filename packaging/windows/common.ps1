@@ -88,11 +88,23 @@ function Resolve-Docker {
     return $false
 }
 
+function Invoke-Native([string] $FilePath, [string[]] $Arguments) {
+    # Windows PowerShell 5.1 change chaque ligne de stderr d'un programme externe
+    # en erreur : avec ErrorActionPreference = Stop, la premiere ligne de
+    # progression de docker ("Pulling", "Started") arretait le script. Un
+    # programme est juge sur son code de sortie, jamais sur stderr.
+    $ErrorActionPreference = 'Continue'
+    $output = @(& $FilePath @Arguments 2>&1 | ForEach-Object { [string]$_ })
+    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+}
+
 function Get-DockerState {
     # 'absent' | 'stopped' | 'windows' | 'linux'
     if (-not (Resolve-Docker)) { return 'absent' }
-    $ostype = (& docker info --format '{{.OSType}}' 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $ostype) { return 'stopped' }
+    $info = Invoke-Native 'docker' @('info', '--format', '{{.OSType}}')
+    $ostype = (($info.Output | Select-Object -Last 1) -as [string])
+    if ($info.ExitCode -ne 0 -or -not $ostype) { return 'stopped' }
+    $ostype = $ostype.Trim()
     if ($ostype -ne 'linux') { return 'windows' }
     return 'linux'
 }
@@ -104,8 +116,13 @@ function Confirm-Action([string] $Question) {
 }
 
 # Appels externes isoles (simules dans les tests).
-function Invoke-Winget([string[]] $Arguments) { & winget @Arguments; return $LASTEXITCODE }
-function Invoke-Wsl([string[]] $Arguments) { & wsl.exe @Arguments 2>$null | Out-Null; return $LASTEXITCODE }
+function Invoke-Winget([string[]] $Arguments) {
+    # Sortie affichee a l'utilisateur (questions de licence comprises), code de retour seul renvoye.
+    $ErrorActionPreference = 'Continue'
+    & winget @Arguments | Out-Host
+    return $LASTEXITCODE
+}
+function Invoke-Wsl([string[]] $Arguments) { return (Invoke-Native 'wsl.exe' $Arguments).ExitCode }
 function Invoke-Elevated([string] $FilePath, [string[]] $Arguments) {
     # Fenetre UAC de Windows : l'utilisateur voit et accepte l'elevation.
     $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Verb RunAs -Wait -PassThru
@@ -185,7 +202,7 @@ function Resolve-DockerPrerequisite([switch] $Interactive) {
                 $cli = if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Docker\Docker\DockerCli.exe' } else { $null }
                 if ($Interactive -and $cli -and (Test-Path -LiteralPath $cli) -and
                     (Confirm-Action 'Docker Desktop execute des conteneurs Windows. Passer aux conteneurs Linux (necessaire) ?')) {
-                    & $cli -SwitchLinuxEngine
+                    Invoke-Native $cli @('-SwitchLinuxEngine') | Out-Null
                     if (Wait-DockerLinux 180) { continue }
                 }
                 throw 'Docker Desktop execute des conteneurs Windows : dans son menu, choisissez "Switch to Linux containers", puis relancez.'
@@ -227,12 +244,12 @@ function Invoke-Compose([string] $AppRoot, [string[]] $Arguments, [switch] $Allo
     $composeFile = Join-Path $AppRoot 'compose.yaml'
     $all = @('compose', '--project-name', $script:ProjectName, '--project-directory', $AppRoot,
              '--env-file', $envFile, '-f', $composeFile) + $Arguments
-    $output = & docker @all 2>&1
-    $code = $LASTEXITCODE
-    if ($code -ne 0 -and -not $AllowFailure) {
-        throw ('docker compose ' + ($Arguments -join ' ') + ' a echoue : ' + (($output | Out-String).Trim()))
+    $result = Invoke-Native 'docker' $all
+    $global:LASTEXITCODE = $result.ExitCode  # les appelants avec -AllowFailure le lisent
+    if ($result.ExitCode -ne 0 -and -not $AllowFailure) {
+        throw ('docker compose ' + ($Arguments -join ' ') + ' a echoue : ' + (($result.Output | Out-String).Trim()))
     }
-    return $output
+    return $result.Output
 }
 
 function Test-PortFree([int] $Port) {

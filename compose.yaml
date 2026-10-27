@@ -115,6 +115,10 @@ services:
       - dev
     volumes:
       - ./:/work
+    # Jeton GitHub fine-grained (CCT seulement : actions:read, contents/pull-requests:write),
+    # lu dans /run/secrets/github_pat, jamais ecrit ailleurs.
+    secrets:
+      - github_pat
     security_opt:
       - no-new-privileges:true
     deploy:
@@ -152,6 +156,10 @@ networks:
   # Reseau sortant pour devtools seulement (registres npm / PyPI).
   dev:
     name: cct-dev
+
+secrets:
+  github_pat:
+    file: /etc/app-secrets/cct/github_pat
 
 volumes:
   data:

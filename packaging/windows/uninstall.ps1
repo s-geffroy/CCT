@@ -16,15 +16,15 @@ try {
     Invoke-Compose $appRoot @('down') | Out-Null
     $link = Get-ShortcutPath
     if ($link -and (Test-Path -LiteralPath $link)) { Remove-Item -LiteralPath $link -Force }
-    $images = @(& docker images --filter 'reference=ghcr.io/*/cct' --format '{{.ID}}' 2>$null)
-    foreach ($id in $images) { & docker image rm $id 2>$null | Out-Null }
+    $images = @((Invoke-Native 'docker' @('images', '--filter', 'reference=ghcr.io/*/cct', '--format', '{{.ID}}')).Output)
+    foreach ($id in $images) { Invoke-Native 'docker' @('image', 'rm', $id) | Out-Null }
 
     if ($PurgeData) {
         Write-Host 'ATTENTION : suppression DEFINITIVE de toutes vos seances et positions.'
         $first = Read-Host 'Taper SUPPRIMER pour continuer'
         $second = Read-Host 'Confirmer une seconde fois : taper SUPPRIMER'
         if ($first -ceq 'SUPPRIMER' -and $second -ceq 'SUPPRIMER') {
-            & docker volume rm $script:VolumeName 2>$null | Out-Null
+            Invoke-Native 'docker' @('volume', 'rm', $script:VolumeName) | Out-Null
             Remove-Item -LiteralPath (Join-Path $appRoot 'backups') -Recurse -Force -ErrorAction SilentlyContinue
             Write-Host 'Donnees supprimees.'
         } else {

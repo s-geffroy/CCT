@@ -64,7 +64,7 @@ informatique.
 | Restaurer | `RESTAURER.cmd` : choisir une sauvegarde ; la base actuelle est d'abord copiée |
 | Mettre à jour | extraire le ZIP de la **nouvelle** version, double-cliquer son `METTRE_A_JOUR.cmd` |
 | Désinstaller | `DESINSTALLER.cmd` : les données sont **conservées** |
-| Signaler un problème | `COLLECTER_DIAGNOSTIC.cmd` : rapport texte sur le Bureau |
+| Signaler un problème | `COLLECTER_DIAGNOSTIC.cmd` : rapport texte dans votre dossier personnel (`%USERPROFILE%`) |
 
 Vos séances et positions vivent dans le volume Docker
 `chess-calculation-trainer-data`. Arrêter, réinstaller, mettre à jour ou

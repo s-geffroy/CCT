@@ -299,3 +299,46 @@ Describe 'Get-ResourceProfile' {
         { Get-ResourceProfile (3GB) 4 } | Should -Throw '*4 Go*'
     }
 }
+
+Describe 'Invoke-Native (programme externe reel)' {
+    BeforeAll {
+        # Un vrai programme qui ecrit sa progression sur stderr, comme docker compose.
+        if ($env:OS -eq 'Windows_NT') {
+            $script:Exe = 'cmd.exe'
+            $script:Ok = @('/c', 'echo Image Pulling 1>&2 & echo fini & exit /b 0')
+            $script:Ko = @('/c', 'echo panne 1>&2 & exit /b 3')
+        } else {
+            $script:Exe = 'sh'
+            $script:Ok = @('-c', 'echo Image Pulling >&2; echo fini; exit 0')
+            $script:Ko = @('-c', 'echo panne >&2; exit 3')
+        }
+    }
+    It 'stderr de progression : aucun arret, meme avec ErrorActionPreference = Stop (Windows PowerShell 5.1)' {
+        $ErrorActionPreference = 'Stop'
+        $r = Invoke-Native $script:Exe $script:Ok
+        $r.ExitCode | Should -Be 0
+        ($r.Output -join ' ') | Should -Match 'Image Pulling'
+        ($r.Output -join ' ') | Should -Match 'fini'
+    }
+    It 'echec reel : juge sur le code de sortie, message conserve' {
+        $ErrorActionPreference = 'Stop'
+        $r = Invoke-Native $script:Exe $script:Ko
+        $r.ExitCode | Should -Be 3
+        ($r.Output -join ' ') | Should -Match 'panne'
+    }
+    It 'les scripts n appellent plus docker, wsl ni winget sans Invoke-Native (hors diagnostic)' {
+        $dir = Split-Path -Parent $PSScriptRoot
+        foreach ($s in Get-ChildItem -LiteralPath $dir -Filter '*.ps1' -File | Where-Object { $_.Name -ne 'collect-diagnostic.ps1' }) {
+            $text = Get-Content -LiteralPath $s.FullName -Raw
+            $text | Should -Not -Match '&\s*(docker|wsl\.exe)\s' -Because $s.Name
+        }
+    }
+}
+
+Describe 'Rapport de diagnostic' {
+    It 'ecrit dans le dossier personnel, jamais sur le Bureau' {
+        $text = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'collect-diagnostic.ps1') -Raw
+        $text | Should -Match '\$reportDir = \$env:USERPROFILE'
+        $text | Should -Not -Match "GetFolderPath\('Desktop'\)"
+    }
+}
