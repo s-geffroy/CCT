@@ -1,7 +1,7 @@
 // Seance d'entrainement : B (calcul mental) ou C (arbre personnel), puis
 // soumission figee, revelation et debriefing. Aucune donnee moteur n'est
 // demandee ni affichee avant la revelation : le serveur n'en envoie pas.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   api,
   ApiFailure,
@@ -50,6 +50,13 @@ type Props = { sessionId: string; onExit: () => void };
 
 export function TrainingView({ sessionId, onExit }: Props) {
   const [session, setSession] = useState<Session | null>(null);
+  // Derniere version connue de la seance (sa revision fait foi pour le serveur) et
+  // file des enregistrements de notes : jamais deux ecritures avec la meme
+  // revision (un blur suivi d'un clic envoyait deux PUT concurrents -> 409, et la
+  // soumission pouvait partir avec une revision perimee).
+  const latest = useRef<Session | null>(null);
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
+  const keep = (next: Session) => { latest.current = next; setSession(next); };
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>(USER_ROOT);
   const [sanInput, setSanInput] = useState('');
@@ -74,7 +81,7 @@ export function TrainingView({ sessionId, onExit }: Props) {
 
   useEffect(() => {
     api.session(sessionId).then((s) => {
-      setSession(s);
+      keep(s);
       setNotes(s.notes);
       setLines(s.lines_text);
       setOrientation(s.position.turn);
@@ -103,12 +110,12 @@ export function TrainingView({ sessionId, onExit }: Props) {
     try {
       const result = await op();
       const next = 'session' in result ? result.session : result;
-      setSession(next);
+      keep(next);
       after?.(next);
     } catch (err) {
       setError(message(err));
       // Conflit de revision : l'etat serveur fait foi.
-      if (err instanceof ApiFailure && err.status === 409) api.session(s.id).then(setSession).catch(() => {});
+      if (err instanceof ApiFailure && err.status === 409) api.session(s.id).then(keep).catch(() => {});
     }
   }
 
@@ -124,8 +131,12 @@ export function TrainingView({ sessionId, onExit }: Props) {
   };
 
   const saveNotes = () => {
-    if (notes === s.notes && lines === s.lines_text) return Promise.resolve();
-    return act(() => api.saveNotes(s, { notes, ...(s.mode === 'mental' ? { lines_text: lines } : {}) }));
+    saving.current = saving.current.then(() => {
+      const cur = latest.current ?? s;
+      if (notes === cur.notes && lines === cur.lines_text) return undefined;
+      return act(() => api.saveNotes(cur, { notes, ...(cur.mode === 'mental' ? { lines_text: lines } : {}) }));
+    });
+    return saving.current;
   };
 
   // Seance prete, pas lancee : ni position, ni chronometre, ni moteur avant le Go.
@@ -288,7 +299,7 @@ export function TrainingView({ sessionId, onExit }: Props) {
           )}
 
           {active && finishing && (
-            <form className="self-assessment" aria-label="Autoevaluation" onSubmit={(e) => { e.preventDefault(); void act(() => api.submit(s, assessment)); }}>
+            <form className="self-assessment" aria-label="Autoevaluation" onSubmit={(e) => { e.preventDefault(); void saving.current.then(() => act(() => api.submit(latest.current ?? s, assessment))); }}>
               <p>Autoevaluation facultative, avant de figer votre tentative :</p>
               <label className="block">Mes coups candidats
                 <input value={assessment.candidates} onChange={(e) => setAssessment({ ...assessment, candidates: e.target.value })} />
