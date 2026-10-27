@@ -4,15 +4,21 @@ IMAGE ?= cct:ci
 APP_VERSION ?= 0.0.0-ci
 VCS_REF ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: ci test bundle-check image smoke e2e
+.PHONY: ci test windows-requirements bundle-check image smoke e2e
 
-ci: test bundle-check image smoke e2e
+ci: test windows-requirements bundle-check image smoke e2e
 
 # pytest dans l'image de test (vrai Stockfish) ; le build rejoue aussi
 # typecheck + vitest du frontend (stage `frontend`).
 test:
 	docker build -f backend/Dockerfile --target test -t cct-test:ci .
 	docker run --rm cct-test:ci
+
+# Dependances de l'installateur natif : exactement uv.lock (versions et empreintes).
+windows-requirements:
+	docker run --rm -v "$(CURDIR)/backend:/b:ro" -w /b ghcr.io/astral-sh/uv:0.13.5 \
+	  export --frozen --no-dev --no-emit-project --format requirements-txt --no-cache \
+	  | diff -u packaging/windows-native/requirements.txt -
 
 # Le ZIP Windows se fabrique et se controle (digest factice) : un defaut de
 # packaging se voit avant le tag, pas au moment de la release.

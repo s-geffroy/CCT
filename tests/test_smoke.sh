@@ -12,6 +12,9 @@ cd "$(dirname "$0")/.."
 echo "== frontend : typecheck + vitest"
 sudo appctl run devtools sh -c 'cd frontend && npm ci --no-audit --no-fund --loglevel=error && npm run typecheck && npm test'
 
+echo "== installateur Windows : dependances = uv.lock"
+sudo appctl run devtools sh -c 'cd backend && uv export --frozen --no-dev --no-emit-project --format requirements-txt | diff -u ../packaging/windows-native/requirements.txt -'
+
 echo "== backend : pytest dans l'image (Stockfish reel)"
 sudo appctl run tests
 
