@@ -89,7 +89,17 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # ---------------------------------------------------------------- runtime
 FROM ${PYTHON_IMAGE} AS runtime
+# Version et revision injectees par la CI au build d'une release (tag vX.Y.Z).
+ARG APP_VERSION=0.1.0-dev
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.title="Chess Calculation Trainer" \
+      org.opencontainers.image.description="Entrainement au calcul des variantes, Stockfish 19 inclus" \
+      org.opencontainers.image.source="https://github.com/s-geffroy/CCT" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}"
 ENV PATH=/venv/bin:$PATH \
+    APP_VERSION=${APP_VERSION} \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     APP_DATA_DIR=/data \
@@ -100,11 +110,12 @@ COPY --from=stockfish /out/stockfish /usr/local/bin/stockfish
 COPY --from=stockfish /out/COPYING-stockfish.txt /out/stockfish-build.txt /usr/share/doc/stockfish/
 COPY --from=frontend /frontend/dist /app/static
 COPY backend/app /app/app
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/cct/
 # Le depot est en 0660 sur l'hote et COPY conserve les modes : sans ce chmod,
 # l'utilisateur 'app' ne peut pas lire le code.
 # /data est cree ICI et possede par 'app' : un volume nomme vide herite du
 # proprietaire du repertoire de l'image.
-RUN chmod -R a+rX /app \
+RUN chmod -R a+rX /app /usr/share/doc/cct \
  && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app \
  && mkdir -p /data && chown app:app /data
 USER app

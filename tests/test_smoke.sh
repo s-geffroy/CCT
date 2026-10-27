@@ -2,7 +2,8 @@
 # Tests de bout en bout sur le VPS, sans rien executer sur l'hote :
 #   1. typecheck + vitest du frontend (conteneur devtools, depot monte) ;
 #   2. pytest dans l'image finale + Stockfish reel (service tests) ;
-#   3. Playwright/Chromium contre le service app reconstruit (service e2e).
+#   3. scripts Windows : analyse statique et Pester (service pwsh) ;
+#   4. Playwright/Chromium contre le service app reconstruit (service e2e).
 # Le build de l'image rejoue aussi typecheck/vitest : un echec casse le build.
 set -euo pipefail
 
@@ -13,6 +14,9 @@ sudo appctl run devtools sh -c 'cd frontend && npm ci --no-audit --no-fund --log
 
 echo "== backend : pytest dans l'image (Stockfish reel)"
 sudo appctl run tests
+
+echo "== scripts Windows : PSScriptAnalyzer + Pester (PowerShell 7)"
+sudo appctl run pwsh
 
 echo "== e2e : Playwright contre l'application reconstruite"
 sudo appctl rebuild
@@ -27,4 +31,4 @@ done
 [ "$healthy" = yes ] || { echo "ECHEC : app non saine"; exit 1; }
 sudo appctl run e2e
 
-echo "OK : frontend, backend et e2e verts"
+echo "OK : frontend, backend, scripts Windows et e2e verts"

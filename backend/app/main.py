@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.staticfiles import StaticFiles
 
+from . import backup
 from .api.analysis import router as analysis_router
 from .api.library import router as library_router
 from .api.reference import router as reference_router
@@ -41,6 +42,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         log.info("demarrage %s (donnees %s)", APP_VERSION, settings.data_dir)
         try:
+            # Restauration demandee par backup.ps1 / update.ps1 : avant toute migration.
+            (settings.data_dir / backup.RESTORE_DIR).mkdir(parents=True, exist_ok=True)
+            backup.apply_pending_restore(settings.data_dir, log)
             version = app.state.db.migrate()
             log.info("base prete : schema v%d, journal %s", version, app.state.db.journal_mode)
             with app.state.db.session() as conn:

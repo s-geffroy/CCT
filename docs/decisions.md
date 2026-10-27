@@ -113,3 +113,36 @@ Le doc 14 demande de les consigner ici.
 - **Mobile** : profil Pixel 7 de Playwright, parcours étiquetés `@mobile` (saisie SAN au
   lieu du glisser-déposer tactile).
 - Thème sombre : non fait (facultatif).
+
+## Lot 6 : publication et paquet Windows
+
+- **Compose Windows** dans `packaging/windows/compose.yaml` (le `compose.yaml` racine
+  reste celui du VPS) ; healthcheck Docker sur `/live` (B5), port `127.0.0.1` seulement.
+- **Lanceurs** (B4) : `INSTALLER`, `OUVRIR`, `ARRETER`, `METTRE_A_JOUR`, `SAUVEGARDER`,
+  `RESTAURER`, `DESINSTALLER`, `COLLECTER_DIAGNOSTIC`. `OUVRIR`/`ARRETER` agissent sur
+  l'installation de `%LOCALAPPDATA%`, d'où qu'on les lance (B9), avec un contrôle léger
+  de Docker seulement (B3). `DESINSTALLER.cmd` tient sur une ligne : il est supprimé
+  pendant la désinstallation et `cmd.exe` relit un `.cmd` en cours d'exécution.
+- **Sauvegarde** faite dans le conteneur (API backup de SQLite, `integrity_check`,
+  version de schéma), puis copiée sur le PC. **Restauration** : fichier déposé dans
+  `/data/restore/`, pris au démarrage suivant après vérification, l'ancienne base étant
+  gardée ; un fichier invalide est mis de côté. **Mise à jour** : sauvegarde vérifiée
+  obligatoire, puis retour arrière automatique (image ET données) si la nouvelle
+  version ne démarre pas.
+- **Seuils** : Windows 11 build 22631 (B1), 7,5 Gio de mémoire avec avertissement sous
+  8 (B2), port libre testé avant démarrage (B8).
+- **CI** (B6, B7) : job `test` en lecture seule, `windows-scripts` sous Windows
+  PowerShell 5.1, `publish` (packages: write) et `release` (contents: write) sur tag
+  seulement ; release **en brouillon** ; actions épinglées par SHA (versions publiées
+  depuis plus de deux semaines). Le smoke est rejoué sur l'image **publiée, par digest**.
+- **Scripts PowerShell en ASCII et CRLF** : Windows PowerShell 5.1 lit un `.ps1` sans BOM
+  en ANSI, et `cmd.exe` lit mal un `.cmd` en LF. Contrôlé par `run.ps1` et par le
+  fabricant du ZIP.
+- **Licence** : `LICENSE` = texte GPL-3.0 copié des sources Stockfish `sf_19`
+  (`Copying.txt`, sha256 `3972dc97...6986`, texte standard) : gnu.org n'est pas joignable
+  depuis le réseau de développement. `THIRD_PARTY_NOTICES.md` est généré depuis l'image
+  finale et le lockfile npm ; Tailwind est passé en dépendance de développement (seul
+  le CSS produit est embarqué).
+- **Tests PowerShell sur le VPS** : service `pwsh` (PowerShell 7, Pester 5.7.1,
+  PSScriptAnalyzer 1.25.0 avec la règle de syntaxe compatible 5.1). Ils ne remplacent
+  ni le runner Windows ni un vrai PC.

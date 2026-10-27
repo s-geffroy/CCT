@@ -315,7 +315,7 @@ export function App() {
       <header className="app-header">
         <h1>Chess Calculation Trainer</h1>
         <p className="meta">
-          {meta?.engine ? `${meta.engine.name} · ${meta.engine.threads} thread(s) · ${meta.engine.hash_mb} Mo` : 'moteur indisponible'}
+          {meta ? `${meta.app_version} · ` : ''}{meta?.engine ? `${meta.engine.name} · ${meta.engine.threads} thread(s) · ${meta.engine.hash_mb} Mo` : 'moteur indisponible'}
         </p>
         <nav aria-label="Modules" className="modules">
           <a href="#/positions" aria-current={route.view === 'positions' ? 'page' : undefined}>Positions</a>

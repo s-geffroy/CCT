@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-APP_VERSION = "0.1.0-dev"
+APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-dev")  # fixe au build de l'image de release
 
 
 def _int_env(name: str, default: int, lo: int, hi: int) -> int:

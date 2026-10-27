@@ -124,6 +124,27 @@ services:
           memory: 2G
           pids: 512
 
+  # Scripts Windows : PSScriptAnalyzer + Pester sous PowerShell 7 (Linux), depot
+  # monte en lecture seule. Aucun reseau a l'execution.
+  pwsh:
+    profiles: [cli]
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: tests/windows/Dockerfile
+    user: "1022:1023"
+    network_mode: none
+    volumes:
+      - ./:/work:ro
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+          pids: 256
+
 networks:
   internal:
     name: cct-internal

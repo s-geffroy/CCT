@@ -64,6 +64,7 @@ les labels a la main.
 | `tests` | image `test` : pytest dans l'image finale | `sudo appctl run tests` |
 | `e2e` | Playwright/Chromium contre `app` (alias `cct-web`) | `sudo appctl rebuild && sudo appctl run e2e` |
 | `devtools` | Node + Python + uv sur le depot monte, reseau `cct-dev` | `sudo appctl run devtools sh -c '...'` |
+| `pwsh` | PowerShell 7 : PSScriptAnalyzer + Pester des scripts Windows, depot en lecture seule, sans reseau | `sudo appctl run pwsh` |
 
 `devtools` sert a generer les lockfiles et a lancer typecheck/vitest ; rien ne
 s'execute sur l'hote, meme si `node` ou `python3` y sont presents.
@@ -154,3 +155,19 @@ rapports dans `tests/e2e/results/` (ignore par git).
 5. `sudo appctl logs` -- verifier que le moteur a demarre (`moteur demarre :
    Stockfish 19`), pas seulement que le conteneur tourne ;
 6. signaler tout echec restant sans le masquer.
+
+## Publication et paquet Windows
+
+- `Makefile` et `scripts/ci/*.sh` utilisent `docker` directement : ils sont faits
+  pour le runner GitHub, **jamais** a lancer sur ce VPS (passer par appctl).
+- Scripts Windows (`packaging/windows/*.ps1`, `*.cmd`) : ASCII uniquement et fins
+  de ligne CRLF (`.gitattributes`), compatibles Windows PowerShell 5.1 ;
+  `sudo appctl run pwsh` doit rester vert. Toute logique testable va dans
+  `common.ps1`, avec un test Pester.
+- Les donnees de l'utilisateur ne sont jamais detruites par defaut : pas de
+  `down -v`, sauvegarde verifiee avant toute mise a jour, retour arriere
+  automatique si la nouvelle version ne demarre pas.
+- Une release ne se fait que par un tag `vX.Y.Z` pousse avec l'accord explicite
+  du proprietaire ; elle reste en brouillon (voir `docs/release.md`). Les gates
+  W01-W12 restent « non validees » tant qu'aucun rapport d'un vrai PC Windows
+  n'est depose sur la branche `validation-windows`.

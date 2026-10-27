@@ -14,6 +14,8 @@ Aucune promesse d'exhaustivite : jusqu'a 20 premiers coups, profondeur cible
 - Rapport du Lot 3 (orchestrateur Stockfish, SSE, etude libre) : `docs/lot3-report.md`
 - Rapport du Lot 4 (arbre de reference ramifie, debriefing, corpus) : `docs/lot4-report.md`
 - Rapport du Lot 5 (UX, accessibilite, reglages, mobile) : `docs/lot5-report.md`
+- Rapport du Lot 6 (publication GitHub, paquet Windows) : `docs/lot6-report.md`
+- Publier une version : `docs/release.md` ; installer sous Windows : `packaging/windows/README_WINDOWS.md`
 
 Cible finale : Windows 11 x64 + Docker Desktop/WSL 2, image GHCR
 `linux/amd64` et installation par double-clic (Lot 6). **Ce VPS sert au
@@ -29,7 +31,10 @@ developpement et aux tests uniquement** : aucun port publie.
 | `backend/Dockerfile` | multi-stage : `stockfish` (sf_19 universal), `frontend`, `pydeps`, `runtime`, `test`, `devtools` |
 | `frontend/` | React 19 + TypeScript + Vite + Tailwind 4/shadcn-ui (`src/components/ui`, generes puis relus) ; `react-chessboard`, `react-arborist` via adaptateurs |
 | `tests/e2e/` | Playwright (Chromium reel, 1280 et 1024 px) contre le service `app` |
-| `compose.yaml` | stack du VPS (`app`, `tests`, `e2e`, `devtools`) |
+| `packaging/windows/` | paquet Windows : compose de production, lanceurs `.cmd`, scripts PowerShell, tests Pester, notices |
+| `.github/workflows/` | CI : tests sur PR/main, image GHCR et release Windows en brouillon sur tag |
+| `Makefile`, `scripts/ci/` | cibles de la CI GitHub (docker direct : runner uniquement) |
+| `compose.yaml` | stack du VPS (`app`, `tests`, `e2e`, `devtools`, `pwsh`) |
 
 ## Cycle de developpement (VPS)
 

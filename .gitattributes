@@ -1,0 +1,4 @@
+# Scripts Windows : fins de ligne CRLF dans tous les checkouts (y compris le
+# runner Linux qui fabrique le ZIP) ; cmd.exe lit mal un .cmd en LF.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
