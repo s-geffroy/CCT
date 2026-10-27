@@ -46,16 +46,6 @@ function message(err: unknown): string {
   return err instanceof ApiFailure ? `${err.error.message} (${err.error.code})` : 'Erreur inattendue.';
 }
 
-function Timer({ since }: { since: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const s = Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
-  return <span className="timer" aria-live="off">{Math.floor(s / 60)} min {String(s % 60).padStart(2, '0')} s</span>;
-}
-
 type Props = { sessionId: string; onExit: () => void };
 
 export function TrainingView({ sessionId, onExit }: Props) {
@@ -64,7 +54,6 @@ export function TrainingView({ sessionId, onExit }: Props) {
   const [selected, setSelected] = useState<string>(USER_ROOT);
   const [sanInput, setSanInput] = useState('');
   const [orientation, setOrientation] = useState<'white' | 'black'>('white');
-  const [showTimer, setShowTimer] = useState(false);
   const [notesHidden, setNotesHidden] = useState(false);
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState('');
@@ -139,6 +128,30 @@ export function TrainingView({ sessionId, onExit }: Props) {
     return act(() => api.saveNotes(s, { notes, ...(s.mode === 'mental' ? { lines_text: lines } : {}) }));
   };
 
+  // Seance prete, pas lancee : ni position, ni chronometre, ni moteur avant le Go.
+  if (active && !s.started) {
+    return (
+      <section className="training" aria-label="Seance d'entrainement">
+        <header className="training-head">
+          <h2>{s.mode === 'mental' ? 'Calcul mental (B)' : 'Arbre personnel (C)'}</h2>
+          <Badge variant="secondary" data-testid="session-state">prete</Badge>
+        </header>
+        {error && <p role="alert" className="error">{error}</p>}
+        <section className="ready-panel" aria-label="Pret ?">
+          <p className="text-lg">Trait aux {s.position.turn === 'white' ? 'Blancs' : 'Noirs'}.</p>
+          <p>Au Go, la position s'affiche et votre temps de reflexion commence : il n'est pas affiche pendant la seance,
+            seulement a la fin, pour comparer avec vos tentatives precedentes sur ce probleme.</p>
+          <p>Stockfish commence a calculer au meme moment, pendant que vous reflechissez ; ses resultats restent masques
+            jusqu'a la revelation.</p>
+          <div className="actions">
+            <Button size="lg" className="min-w-32 text-base" onClick={() => act(() => api.start(s))}>Go</Button>
+            <Button variant="outline" size="sm" onClick={() => act(() => api.abandon(s))}>Abandonner</Button>
+          </div>
+        </section>
+      </section>
+    );
+  }
+
   const lastMove = selectedNode?.uci ? { from: selectedNode.uci.slice(0, 2), to: selectedNode.uci.slice(2, 4) } : null;
 
   return (
@@ -146,13 +159,7 @@ export function TrainingView({ sessionId, onExit }: Props) {
       <header className="training-head">
         <h2>{s.mode === 'mental' ? 'Calcul mental (B)' : 'Arbre personnel (C)'}</h2>
         <Badge variant="secondary" data-testid="session-state">{STATE_LABEL[s.state]}</Badge>
-        {active && (
-          <label className="timer-toggle">
-            <input type="checkbox" checked={showTimer} onChange={(e) => setShowTimer(e.target.checked)} /> chronometre
-          </label>
-        )}
-        {active && showTimer && <Timer since={s.started_at} />}
-        {s.duration_ms !== null && <span>duree : {Math.round(s.duration_ms / 1000)} s</span>}
+        {s.duration_ms !== null && <span data-testid="thinking-time">temps de reflexion : {formatDuration(s.duration_ms)}</span>}
       </header>
       {error && <p role="alert" className="error">{error}</p>}
 
@@ -374,9 +381,30 @@ function Debrief({ session }: { session: Session }) {
         </dl>
       )}
       {attempt.notes && <p className="notes">Notes : {attempt.notes}</p>}
+      {session.duration_ms !== null && (
+        <div className="attempts" data-testid="previous-attempts">
+          <p>Temps de reflexion : <strong>{formatDuration(session.duration_ms)}</strong> (depuis le Go).</p>
+          {session.previous_attempts && session.previous_attempts.length > 0 ? (
+            <ul>
+              {session.previous_attempts.map((a) => (
+                <li key={a.id}>
+                  <time dateTime={a.go_at}>{new Date(a.go_at).toLocaleDateString('fr-FR')}</time>
+                  {' '}({a.mode === 'mental' ? 'calcul mental' : 'arbre'}) : {a.duration_ms !== null ? formatDuration(a.duration_ms) : 'non soumise'}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="empty">Premiere tentative sur ce probleme.</p>}
+        </div>
+      )}
       {session.reference?.status === 'not_available' && (
         <p className="reference" data-testid="reference-status">{session.reference.message}</p>
       )}
     </section>
   );
+}
+
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  return m ? `${m} min ${String(total % 60).padStart(2, '0')} s` : `${total} s`;
 }

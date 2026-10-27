@@ -71,6 +71,7 @@ test('mode C : arbre a branches, coup illegal refuse, annuler/retablir, soumissi
   const bodies = spy(page);
   await retainStart(page);
   await page.getByRole('button', { name: 'Construire mon arbre (C)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
   await expect(page).toHaveURL(/#\/session\/[0-9a-f-]{36}$/);
   await expect(page.getByTestId('session-state')).toHaveText('en cours');
 
@@ -126,6 +127,7 @@ test('mode B : echiquier fige, variantes jugees seulement au debriefing', async 
   const bodies = spy(page);
   await retainStart(page);
   await page.getByRole('button', { name: 'Calcul mental (B)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
   await expect(page.locator('.board[data-mode="locked"]')).toBeVisible();
 
   // Glisser une piece ne joue rien en calcul mental.
@@ -158,6 +160,7 @@ test('mode B : echiquier fige, variantes jugees seulement au debriefing', async 
 test('historique : la seance apparait et se rouvre', async ({ page }) => {
   await retainStart(page);
   await page.getByRole('button', { name: 'Construire mon arbre (C)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
   await expect(page).toHaveURL(/#\/session\//);
   const id = page.url().split('/').pop()!;
   await page.getByRole('link', { name: 'Historique' }).click();

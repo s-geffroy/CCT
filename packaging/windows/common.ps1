@@ -37,7 +37,7 @@ function Read-EnvFile([string] $Path) {
 }
 
 function Write-EnvFile([string] $Path, [hashtable] $Values) {
-    $order = @('IMAGE_REF', 'HOST_PORT', 'APP_CPUS', 'APP_MEMORY')
+    $order = @('IMAGE_REF', 'HOST_PORT', 'APP_CPUS', 'APP_MEMORY', 'ENGINE_THREADS', 'ENGINE_HASH_MB')
     $keys = @($order | Where-Object { $Values.ContainsKey($_) }) + @($Values.Keys | Where-Object { $order -notcontains $_ } | Sort-Object)
     $text = (($keys | ForEach-Object { $_ + '=' + $Values[$_] }) -join "`n") + "`n"
     [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
@@ -340,4 +340,18 @@ function Copy-BundleFiles([string] $SourceRoot, [string] $AppRoot) {
 
 function Get-BundleRoot([string] $ScriptRoot) {
     return (Resolve-Path (Join-Path $ScriptRoot '..\..')).Path
+}
+
+function Get-ResourceProfile([int64] $RamBytes, [int] $LogicalCores) {
+    # Configuration du conteneur selon le PC. Le moteur calcule pendant que le
+    # joueur reflechit : un PC modeste rend l'analyse plus lente, pas impossible.
+    if ($RamBytes -lt (3.5 * 1GB)) {
+        throw ('Docker Desktop demande au moins 4 Go de memoire (detecte : ' + [math]::Round($RamBytes / 1GB, 1) + ' Go) : ce PC ne convient pas.')
+    }
+    # Garder un coeur pour Windows et le navigateur.
+    $cpus = [math]::Max(1, [math]::Min(2, $LogicalCores - 1))
+    if ($RamBytes -lt (7.5 * 1GB)) {
+        return @{ APP_MEMORY = '1g'; ENGINE_HASH_MB = '64'; APP_CPUS = ([string]$cpus + '.0'); ENGINE_THREADS = [string]$cpus; Light = $true }
+    }
+    return @{ APP_MEMORY = '2g'; ENGINE_HASH_MB = '128'; APP_CPUS = ([string]$cpus + '.0'); ENGINE_THREADS = [string]$cpus; Light = $false }
 }

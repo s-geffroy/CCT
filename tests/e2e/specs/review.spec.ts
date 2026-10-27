@@ -22,6 +22,7 @@ test('debriefing : refutation prouvee, branche du joueur dans l arbre de referen
   await page.getByRole('button', { name: 'Charger' }).click();
   await page.getByRole('button', { name: 'Retenir cette position' }).click();
   await page.getByRole('button', { name: 'Construire mon arbre (C)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
   await expect(page).toHaveURL(/#\/session\//);
 
   // Avant la revelation : aucune section de debriefing ni d'arbre.

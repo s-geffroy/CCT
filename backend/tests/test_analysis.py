@@ -186,7 +186,7 @@ def test_session_reference_is_hidden_until_reveal(engine_client):
         return r
 
     position = _position(engine_client)
-    s = rec(engine_client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree"})).json()
+    s = rec(engine_client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree", "start": True})).json()
     job_id = s["preparation"]["job_id"]
     # Le travail progresse en arriere-plan ; le client hostile insiste.
     deadline = time.monotonic() + 90
@@ -227,7 +227,7 @@ def test_existing_study_results_are_hidden_once_a_session_starts(engine_client):
     position = _position(engine_client)
     study = _wait(engine_client, _job(engine_client, position["id"], target_depth=8)["id"], _done)
     assert study["visibility"] == "full" and study["lines"]
-    s = engine_client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "mental"}).json()
+    s = engine_client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "mental", "start": True}).json()
     hidden = engine_client.get(f"/api/v1/analysis-jobs/{study['id']}").json()
     assert hidden["visibility"] == "hidden" and leaks(hidden) == []
     engine_client.post(f"/api/v1/sessions/{s['id']}/abandon", json={"expected_revision": s["revision"]})
@@ -238,7 +238,7 @@ def test_engine_disabled_keeps_sessions_usable(client):
     position = _position(client)
     r = client.post("/api/v1/analysis-jobs", json={"position_id": position["id"]})
     assert r.status_code == 503 and r.json()["error"]["code"] == "ENGINE_UNAVAILABLE"
-    s = client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree"}).json()
+    s = client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree", "start": True}).json()
     assert "preparation" not in s
     s = client.post(f"/api/v1/sessions/{s['id']}/submit", json={"expected_revision": s["revision"]}).json()
     s = client.post(f"/api/v1/sessions/{s['id']}/reveal", json={"expected_revision": s["revision"]}).json()

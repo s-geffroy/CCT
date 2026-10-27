@@ -69,7 +69,7 @@ def clients(tmp_path_factory):
 def _run(client: TestClient, case: dict) -> tuple[dict, dict[str, str]]:
     position = client.post("/api/v1/positions", json={"source": "fen", "fen": case["fen"]}).json()
     s = client.post("/api/v1/sessions", json={"position_id": position["id"],
-                                             "mode": case.get("mode", "tree")}).json()
+                                             "mode": case.get("mode", "tree"), "start": True}).json()
     revealed = False
     try:
         ids: dict[tuple[str, ...], str] = {}

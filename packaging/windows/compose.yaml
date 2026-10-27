@@ -13,6 +13,9 @@ services:
       - trainer_data:/data
     environment:
       APP_DATA_DIR: /data
+      # Ajustes a la memoire du PC par l'installateur (.env).
+      ENGINE_THREADS: ${ENGINE_THREADS:-2}
+      ENGINE_HASH_MB: ${ENGINE_HASH_MB:-128}
     cpus: ${APP_CPUS:-2.0}
     mem_limit: ${APP_MEMORY:-2g}
     pids_limit: 256

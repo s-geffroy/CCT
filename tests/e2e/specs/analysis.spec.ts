@@ -55,6 +55,7 @@ test('seance : analyse refusee pendant le calcul, reference montree apres revela
   test.setTimeout(150_000);
   const positionId = await retain(page, SESSION_FEN);
   await page.getByRole('button', { name: 'Construire mon arbre (C)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
   await expect(page).toHaveURL(/#\/session\//);
   const sessionUrl = page.url();
   await expect(page.getByTestId('preparation')).toBeVisible();

@@ -42,6 +42,8 @@ class SessionIn(StrictModel):
     # Preparer la reference en arriere-plan pendant que le joueur calcule ;
     # rien n'en sort avant la revelation.
     start_analysis_in_background: bool = True
+    # Lancer tout de suite (equivalent du bouton Go) : clients d'API et tests.
+    start: bool = False
 
 
 class NodeIn(StrictModel):
@@ -95,6 +97,8 @@ def session_view(conn: sqlite3.Connection, row: sqlite3.Row, scheduler=None) -> 
         "revealed_at": row["revealed_at"],
         "abandoned_at": row["abandoned_at"],
         "duration_ms": row["duration_ms"],
+        "go_at": row["go_at"],
+        "started": row["go_at"] is not None,
         "allow_text_notes": bool(row["allow_text_notes"]),
         "notes": row["notes"],
         "lines_text": row["lines_text"],
@@ -105,6 +109,9 @@ def session_view(conn: sqlite3.Connection, row: sqlite3.Row, scheduler=None) -> 
         "can_redo": row["state"] == "active" and can_redo,
         "attempt": sessions_repo.get_attempt(conn, row["id"]),
     }
+    if row["state"] != "active":
+        # Comparer ses durees de reflexion sur le meme probleme, une fois la seance finie.
+        view["previous_attempts"] = sessions_repo.previous_attempts(conn, row, analysis_repo.board_key)
     job = analysis_repo.get(conn, row["reference_job_id"]) if row["reference_job_id"] else None
     if row["state"] in REVEALED_STATES:
         # Seul endroit ou la reference est jointe. job_view applique encore la
@@ -163,10 +170,27 @@ def _start_reference(request: Request, conn: sqlite3.Connection, row: sqlite3.Ro
 @router.post("/sessions", status_code=201)
 def create_session(body: SessionIn, request: Request) -> dict:
     with request.app.state.db.session() as conn:
-        session_id = sessions_repo.create(conn, str(body.position_id), body.mode, body.allow_text_notes)
-        if body.start_analysis_in_background:
-            _start_reference(request, conn, sessions_repo.get(conn, session_id))
-        return session_view(conn, sessions_repo.get(conn, session_id), request.app.state.scheduler)
+        session_id = sessions_repo.create(conn, str(body.position_id), body.mode, body.allow_text_notes,
+                                          analysis_on_go=body.start_analysis_in_background)
+    if body.start:
+        return _go(request, UUID(session_id), 1)
+    return _view(request, session_id)
+
+
+def _go(request: Request, session_id: UUID, expected: int) -> dict:
+    _mutate(request, session_id, expected, lambda conn, row: sessions_repo.start(conn, row))
+    with request.app.state.db.session() as conn:
+        row = sessions_repo.get(conn, str(session_id))
+        # Le moteur calcule pendant que le joueur reflechit, a partir du Go.
+        if row["analysis_on_go"] and row["reference_job_id"] is None:
+            _start_reference(request, conn, row)
+        return session_view(conn, sessions_repo.get(conn, str(session_id)), request.app.state.scheduler)
+
+
+@router.post("/sessions/{session_id}/start")
+def start(session_id: UUID, body: RevisionIn, request: Request) -> dict:
+    """Bouton Go : chronometre (non affiche) et calculs du moteur."""
+    return _go(request, session_id, body.expected_revision)
 
 
 @router.get("/sessions/{session_id}")

@@ -61,7 +61,7 @@ def test_session_tree_is_hidden_then_branches_and_review_after_reveal(tree_clien
         return r
 
     position = _position(c, BLUNDER_FEN)
-    s = rec(c.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree"})).json()
+    s = rec(c.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree", "start": True})).json()
     with _db(c) as conn:
         tree_id = conn.execute("SELECT reference_tree_id FROM sessions WHERE id = ?", (s["id"],)).fetchone()[0]
     assert tree_id
@@ -123,7 +123,7 @@ def test_session_tree_is_hidden_then_branches_and_review_after_reveal(tree_clien
 
     # Une nouvelle seance sur le meme echiquier masque de nouveau tout, y compris
     # le debriefing et l'export de la seance deja revelee.
-    other = c.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "mental"}).json()
+    other = c.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "mental", "start": True}).json()
     for body in (c.get(f"/api/v1/sessions/{s['id']}/review").json(), c.get(f"/api/v1/reference-trees/{tree_id}").json()):
         assert leaks(body) == [], leaks(body)
     for view in (c.get(f"/api/v1/sessions/{s['id']}").json(), c.get(f"/api/v1/sessions/{s['id']}/export").json()["session"]):

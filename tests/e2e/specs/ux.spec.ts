@@ -101,6 +101,7 @@ test('clavier : tableau des variantes et arbre de seance, abandon confirme', asy
   await abandonOpenSessionsOn(page, TREE_FEN);
   await retain(page, TREE_FEN);
   await page.getByRole('button', { name: 'Construire mon arbre (C)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
   // Chaque ajout doit etre termine (champ vide) avant le suivant : la reponse
   // du serveur selectionne le nouveau coup.
   const add = async (move: string) => {
@@ -162,7 +163,12 @@ test('analyse active : l interface reste fluide pendant le flux de resultats', a
   }
   await expect(state).toHaveAttribute('data-state', 'running');
   const longTasks = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
-  expect(Math.max(0, ...longTasks), `taches longues : ${longTasks.join(', ')}`).toBeLessThan(200);
+  const detail = `taches longues (ms) : ${longTasks.map(Math.round).join(', ') || 'aucune'}`;
+  console.log(detail);
+  // Aucun gel perceptible (> 500 ms), et le fil principal libre au moins 75 % du
+  // temps de mesure (~12 s), meme quand Stockfish occupe le processeur en parallele.
+  expect(Math.max(0, ...longTasks), detail).toBeLessThan(500);
+  expect(longTasks.reduce((a, b) => a + b, 0), detail).toBeLessThan(3000);
   await page.getByRole('button', { name: 'Arreter' }).click();
   await expect(state).toHaveAttribute('data-state', 'cancelled', { timeout: 15_000 });
 });
@@ -184,6 +190,7 @@ test('@mobile seance complete sur telephone, sans debordement horizontal', async
   await abandonOpenSessionsOn(page, MOBILE_FEN);
   await retain(page, MOBILE_FEN);
   await page.getByRole('button', { name: 'Construire mon arbre (C)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
   await expect(page).toHaveURL(/#\/session\//);
   await page.getByLabel('Coup (SAN ou UCI)').fill('Bc4');
   await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
@@ -197,4 +204,26 @@ test('@mobile seance complete sur telephone, sans debordement horizontal', async
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   await page.screenshot({ path: `results/screens/${test.info().project.name}-session.png`, fullPage: true });
+});
+
+test('Go : rien avant (ni position, ni moteur), temps de reflexion compare apres', async ({ page }) => {
+  test.setTimeout(120_000);
+  const GO_FEN = 'r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R w KQkq - 4 4';
+  await abandonOpenSessionsOn(page, GO_FEN);
+  await retain(page, GO_FEN);
+  await page.getByRole('button', { name: 'Calcul mental (B)' }).click();
+  await expect(page.getByTestId('session-state')).toHaveText('prete');
+  await expect(page.locator('.board')).toHaveCount(0);
+  await expect(page.getByTestId('preparation')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
+  await expect(page.getByTestId('session-state')).toHaveText('en cours');
+  await expect(page.locator('.board')).toHaveCount(1);
+  await expect(page.getByTestId('preparation')).toBeVisible();
+  // Aucun chronometre visible pendant la seance.
+  await expect(page.getByText(/chronometre|temps de reflexion/i)).toHaveCount(0);
+  await page.getByRole('button', { name: "J'ai termine" }).click();
+  await page.getByRole('button', { name: 'Soumettre ma tentative' }).click();
+  await expect(page.getByTestId('thinking-time')).toBeVisible();
+  await page.getByRole('button', { name: 'Reveler' }).click();
+  await expect(page.getByTestId('previous-attempts')).toContainText('Temps de reflexion');
 });

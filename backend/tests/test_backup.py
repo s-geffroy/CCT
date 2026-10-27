@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app import backup
 from app.main import create_app
+from app.persistence.db import load_migrations
 
 log = logging.getLogger("test")
 
@@ -16,14 +17,14 @@ log = logging.getLogger("test")
 def _session(client) -> str:
     position = client.post("/api/v1/positions", json={"source": "fen",
                                                      "fen": "8/8/8/8/8/4k3/8/4K2R w K - 0 1"}).json()
-    return client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree"}).json()["id"]
+    return client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree", "start": True}).json()["id"]
 
 
 def test_backup_is_consistent_and_verified_while_the_app_runs(settings):
     with TestClient(create_app(settings)) as c:
         session_id = _session(c)
         result = backup.create(settings.data_dir)  # base ouverte, en WAL
-    assert result["ok"] and result["sessions"] == 1 and result["schema_version"] == 4
+    assert result["ok"] and result["sessions"] == 1 and result["schema_version"] == len(load_migrations())
     assert result["path"].startswith(str(settings.data_dir / "backups" / "cct-"))
     with sqlite3.connect(result["path"]) as conn:
         assert conn.execute("SELECT id FROM sessions").fetchone()[0] == session_id

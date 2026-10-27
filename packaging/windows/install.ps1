@@ -22,7 +22,11 @@ try {
     Write-Step ('Installation de ' + $manifest.app_version + ' dans ' + (Protect-Text $appRoot))
     Copy-BundleFiles $bundle $appRoot
     if (-not $existing.ContainsKey('IMAGE_REF')) {
-        Write-EnvFile $envFile @{ IMAGE_REF = $imageRef; HOST_PORT = [string]$manifest.host_port_default; APP_CPUS = '2.0'; APP_MEMORY = '2g' }
+        $computer = Get-CimInstance -ClassName Win32_ComputerSystem
+        $resources = Get-ResourceProfile ([int64]$computer.TotalPhysicalMemory) ([int]$computer.NumberOfLogicalProcessors)
+        Write-EnvFile $envFile @{ IMAGE_REF = $imageRef; HOST_PORT = [string]$manifest.host_port_default;
+                                APP_CPUS = $resources.APP_CPUS; APP_MEMORY = $resources.APP_MEMORY;
+                                ENGINE_THREADS = $resources.ENGINE_THREADS; ENGINE_HASH_MB = $resources.ENGINE_HASH_MB }
     }
     $port = Get-HostPort (Read-EnvFile $envFile)
     $url = 'http://127.0.0.1:' + $port

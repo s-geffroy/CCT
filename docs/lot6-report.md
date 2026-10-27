@@ -94,3 +94,26 @@ G06 et W01 à W12 sont **non validées** à ce jour.
 3. Paquet GHCR en Public, puis pull anonyme (G05).
 4. Validation sur un PC Windows 11 (W01–W12), rapport sur `validation-windows`.
 5. Publier le brouillon.
+
+## Retours du propriétaire (27/10)
+
+- **PC de moins de 8 Go** : minimum ramené à 4 Go (celui de Docker Desktop). Sous
+  7,5 Gio, `.env` est écrit en configuration allégée (conteneur 1 Go, hachage 64 Mo,
+  threads = cœurs - 1, au plus 2) : Stockfish calcule plus lentement, pendant la
+  réflexion du joueur. Pester : profils testés (36/36).
+- **Bouton Go** : la séance s'ouvre sur « Prêt ? » (position masquée) ; Go démarre le
+  temps de réflexion (jamais affiché pendant la séance) et la référence Stockfish.
+  Après la soumission : durée depuis le Go et tentatives précédentes sur le même
+  échiquier. Migration 0005 (`go_at`, `analysis_on_go`) ; `POST /sessions/{id}/start`.
+- **Première CI GitHub** : job Windows (PowerShell 5.1) vert ; job principal rouge à
+  Playwright. Cause trouvée sans les journaux (403 sans authentification) :
+  `scripts/ci/e2e.sh` lançait l'application en lecture seule **sans volume** pour
+  `/data`, et ne s'arrêtait pas quand elle n'était pas prête. Corrigé.
+- **Test de fluidité** : critère ajusté après analyse. Le seuil de 200 ms par tâche
+  échouait sous contention CPU (Stockfish et calculs d'arbre en parallèle sur les
+  4 cœurs du VPS), mais passait 8 fois sur 8 seul. Désormais : chaque action visible
+  en moins de 500 ms, aucune tâche de plus de 500 ms, et moins de 3 s bloquées sur
+  environ 12 s de flux.
+
+Tests après ces retours : pytest **144/144**, vitest **24/24**, scripts Windows
+(analyse 0, Pester **36/36**), Playwright **54/54**.

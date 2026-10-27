@@ -1,21 +1,35 @@
 #!/usr/bin/env bash
-# Playwright (Chromium) contre l'image finale, sur un reseau Docker dedie.
+# Playwright (Chromium) contre l'image finale, sur un reseau Docker dedie, dans
+# les conditions du compose Windows (lecture seule, volume nomme sur /data).
 # Les rapports et captures restent dans tests/e2e/results (artefacts de la CI).
 set -euo pipefail
 IMAGE="$1"
 NET="cct-e2e-$$"
 APP="cct-e2e-app-$$"
-cleanup() { docker rm -f "$APP" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true; }
+VOLUME="cct-e2e-data-$$"
+cleanup() {
+  docker rm -f "$APP" >/dev/null 2>&1 || true
+  docker network rm "$NET" >/dev/null 2>&1 || true
+  docker volume rm "$VOLUME" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 docker network create "$NET" >/dev/null
 docker run -d --name "$APP" --network "$NET" --network-alias cct-web --read-only --tmpfs /tmp \
-  -e ALLOWED_HOSTS=127.0.0.1,localhost,cct-web "$IMAGE" >/dev/null
+  -v "$VOLUME:/data" -e ALLOWED_HOSTS=127.0.0.1,localhost,cct-web "$IMAGE" >/dev/null
+ready=""
 for _ in $(seq 1 60); do
-  if docker exec "$APP" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)" >/dev/null 2>&1; then break; fi
+  if docker exec "$APP" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)" >/dev/null 2>&1; then
+    ready=yes; break
+  fi
   sleep 2
 done
+if [ -z "$ready" ]; then docker logs "$APP" 2>&1 | tail -50; echo "ECHEC : l'application n'est pas prete"; exit 1; fi
 docker build -t cct-e2e:ci tests/e2e
 mkdir -p tests/e2e/results && chmod 0777 tests/e2e/results
+status=0
 docker run --rm --network "$NET" -e E2E_BASE_URL=http://cct-web:8000 \
-  -v "$PWD/tests/e2e/results:/e2e/results" cct-e2e:ci
+  -v "$PWD/tests/e2e/results:/e2e/results" cct-e2e:ci || status=$?
+# En cas d'echec, le journal du serveur accompagne les traces Playwright.
+if [ "$status" -ne 0 ]; then docker logs "$APP" > tests/e2e/results/app.log 2>&1 || true; fi
+exit "$status"

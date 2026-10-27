@@ -147,6 +147,9 @@ export type Session = {
   revealed_at: string | null;
   abandoned_at: string | null;
   duration_ms: number | null;
+  go_at: string | null;
+  started: boolean;
+  previous_attempts?: { id: string; mode: 'mental' | 'tree'; state: string; go_at: string; duration_ms: number | null }[];
   allow_text_notes: boolean;
   notes: string;
   lines_text: string;
@@ -351,6 +354,7 @@ export const api = {
     send<Session>('PUT', `/api/v1/sessions/${s.id}/notes`, { expected_revision: s.revision, ...notes }),
   submit: (s: Session, self_assessment: SelfAssessment | null) =>
     post<Session>(`/api/v1/sessions/${s.id}/submit`, { expected_revision: s.revision, self_assessment }),
+  start: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/start`, { expected_revision: s.revision }),
   reveal: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/reveal`, { expected_revision: s.revision }),
   abandon: (s: Session) => post<Session>(`/api/v1/sessions/${s.id}/abandon`, { expected_revision: s.revision }),
   createJob: (position_id: string, settings: { target_depth: number; multipv_max: number; budget_s: number }) =>

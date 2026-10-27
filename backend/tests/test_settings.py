@@ -66,7 +66,7 @@ def test_engine_settings_apply_without_restart_and_drive_new_references(engine_c
     assert c.get("/api/v1/settings").json()["engine"]["pending"] is None
     assert c.get("/api/v1/meta").json()["engine"]["hash_mb"] == 32
     position = c.post("/api/v1/positions", json={"source": "fen", "fen": "8/8/8/8/8/4k3/8/4K2R w K - 0 1"}).json()
-    s = c.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree"}).json()
+    s = c.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree", "start": True}).json()
     with sqlite3.connect(c.app.state.settings.data_dir / "app.sqlite") as conn:
         depth = conn.execute("SELECT json_extract(settings_json, '$.target_depth'), json_extract(settings_json,"
                              " '$.engine.hash_mb') FROM analysis_jobs WHERE id = (SELECT reference_job_id FROM sessions"

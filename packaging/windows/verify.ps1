@@ -8,7 +8,6 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 $MinBuild = 22631          # Windows 11 23H2 : seuil unique (decisions B1)
-$MinRamBytes = 7.5 * 1GB   # un PC "8 Go" affiche ~7,7 Gio utilisables (B2)
 
 if ($Light) { Assert-DockerReady; return }
 
@@ -22,8 +21,12 @@ if ([int]$os.BuildNumber -lt $MinBuild) {
 $arch = (Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1).Architecture
 if ($arch -ne 9) { throw 'Ce PC a un processeur ARM : non pris en charge en V1 (un PC Intel ou AMD 64 bits est requis).' }
 $ram = [int64](Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory
-if ($ram -lt $MinRamBytes) { throw ('Au moins 8 Go de memoire sont requis (detecte : ' + [math]::Round($ram / 1GB, 1) + ' Go) : ce PC ne convient pas.') }
-if ($ram -lt 8GB) { Write-Warning 'Memoire juste suffisante : fermez les applications lourdes pendant les analyses.' }
+$cores = [int](Get-CimInstance -ClassName Win32_ComputerSystem).NumberOfLogicalProcessors
+$resources = Get-ResourceProfile $ram $cores   # refuse sous 4 Go (minimum de Docker Desktop)
+if ($resources.Light) {
+    Write-Warning ('Memoire limitee (' + [math]::Round($ram / 1GB, 1) + ' Go) : configuration allegee, analyses plus lentes. ' +
+                   'Le moteur calcule pendant votre reflexion ; fermez les applications lourdes.')
+}
 $drive = ([System.IO.Path]::GetPathRoot($env:LOCALAPPDATA)).TrimEnd('\')
 $disk = Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='" + $drive + "'")
 if ($null -ne $disk -and [int64]$disk.FreeSpace -lt 5GB) {

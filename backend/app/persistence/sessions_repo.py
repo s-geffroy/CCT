@@ -25,16 +25,18 @@ def _parse_ts(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
-def create(conn: sqlite3.Connection, position_id: str, mode: str, allow_text_notes: bool) -> str:
+def create(conn: sqlite3.Connection, position_id: str, mode: str, allow_text_notes: bool,
+           analysis_on_go: bool = True) -> str:
+    """Seance prete, pas lancee : `go_at` reste vide jusqu'au Go."""
     session_id = str(uuid.uuid4())
     now = utc_now()
     with transaction(conn):
         if conn.execute("SELECT 1 FROM positions WHERE id = ?", (position_id,)).fetchone() is None:
             raise NotFound("POSITION_NOT_FOUND", "Position inconnue.")
         conn.execute(
-            "INSERT INTO sessions (id, position_id, mode, state, allow_text_notes, started_at)"
-            " VALUES (?, ?, ?, 'active', ?, ?)",
-            (session_id, position_id, mode, int(allow_text_notes), now),
+            "INSERT INTO sessions (id, position_id, mode, state, allow_text_notes, started_at, analysis_on_go)"
+            " VALUES (?, ?, ?, 'active', ?, ?, ?)",
+            (session_id, position_id, mode, int(allow_text_notes), now, int(analysis_on_go)),
         )
         conn.execute("INSERT INTO tree_states (session_id, seq, state_json, created_at) VALUES (?, 0, '{}', ?)",
                      (session_id, now))
@@ -112,6 +114,7 @@ def _materialize(conn: sqlite3.Connection, session_id: str, state: TreeState) ->
 
 def write_tree(conn: sqlite3.Connection, row: sqlite3.Row, state: TreeState) -> None:
     """Nouvel etat de l'arbre : l'historique de retablissement est abandonne."""
+    require_started(row)
     cursor = row["tree_cursor"] + 1
     conn.execute("DELETE FROM tree_states WHERE session_id = ? AND seq >= ?", (row["id"], cursor))
     conn.execute("INSERT INTO tree_states (session_id, seq, state_json, created_at) VALUES (?, ?, ?, ?)",
@@ -121,6 +124,7 @@ def write_tree(conn: sqlite3.Connection, row: sqlite3.Row, state: TreeState) -> 
 
 
 def move_cursor(conn: sqlite3.Connection, row: sqlite3.Row, step: int) -> None:
+    require_started(row)
     target = row["tree_cursor"] + step
     state_row = conn.execute(
         "SELECT state_json FROM tree_states WHERE session_id = ? AND seq = ?", (row["id"], target)
@@ -133,6 +137,7 @@ def move_cursor(conn: sqlite3.Connection, row: sqlite3.Row, step: int) -> None:
 
 
 def set_notes(conn: sqlite3.Connection, row: sqlite3.Row, notes: str | None, lines_text: str | None) -> None:
+    require_started(row)
     if notes is not None:
         conn.execute("UPDATE sessions SET notes = ? WHERE id = ?", (notes, row["id"]))
     if lines_text is not None:
@@ -140,8 +145,10 @@ def set_notes(conn: sqlite3.Connection, row: sqlite3.Row, notes: str | None, lin
 
 
 def submit(conn: sqlite3.Connection, row: sqlite3.Row, self_assessment: dict | None, snapshot: dict) -> None:
+    require_started(row)
     now = utc_now()
-    duration = int((_parse_ts(now) - _parse_ts(row["started_at"])).total_seconds() * 1000)
+    # Duree de reflexion : depuis le Go (le moteur calculait pendant ce temps).
+    duration = int((_parse_ts(now) - _parse_ts(row["go_at"] or row["started_at"])).total_seconds() * 1000)
     # Le contenu est ecrit AVANT le changement d'etat : apres, les triggers le figent.
     conn.execute("UPDATE sessions SET self_assessment_json = ? WHERE id = ?",
                  (json.dumps(self_assessment) if self_assessment is not None else None, row["id"]))
@@ -168,7 +175,7 @@ def get_attempt(conn: sqlite3.Connection, session_id: str) -> dict | None:
 
 def history(conn: sqlite3.Connection, limit: int, offset: int) -> list[dict]:
     rows = conn.execute(
-        "SELECT s.id, s.mode, s.state, s.started_at, s.submitted_at, s.revealed_at, s.duration_ms,"
+        "SELECT s.id, s.mode, s.state, s.started_at, s.go_at, s.submitted_at, s.revealed_at, s.duration_ms,"
         " p.id AS position_id, p.fen,"
         " (SELECT r.quality FROM reviews r WHERE r.session_id = s.id ORDER BY r.created_at DESC LIMIT 1) AS review_quality"
         " FROM sessions s JOIN positions p ON p.id = s.position_id"
@@ -176,3 +183,27 @@ def history(conn: sqlite3.Connection, limit: int, offset: int) -> list[dict]:
         (limit, offset),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def start(conn: sqlite3.Connection, row: sqlite3.Row) -> None:
+    """Go : debut du chronometre (jamais affiche pendant la seance)."""
+    if row["go_at"] is not None:
+        raise StateError("ALREADY_STARTED", "Seance deja lancee.")
+    conn.execute("UPDATE sessions SET go_at = ? WHERE id = ?", (utc_now(), row["id"]))
+
+
+def require_started(row: sqlite3.Row) -> None:
+    if row["go_at"] is None:
+        raise StateError("SESSION_NOT_STARTED", "Appuyez d'abord sur Go pour commencer la seance.")
+
+
+def previous_attempts(conn: sqlite3.Connection, row: sqlite3.Row, board_key) -> list[dict]:
+    """Autres tentatives lancees sur le meme probleme (meme echiquier), pour
+    comparer les durees de reflexion. Jamais avant la fin de la seance."""
+    fen = conn.execute("SELECT fen FROM positions WHERE id = ?", (row["position_id"],)).fetchone()["fen"]
+    rows = conn.execute(
+        "SELECT s.id, s.mode, s.state, s.go_at, s.duration_ms, p.fen FROM sessions s"
+        " JOIN positions p ON p.id = s.position_id WHERE s.id <> ? AND s.go_at IS NOT NULL ORDER BY s.go_at DESC",
+        (row["id"],)).fetchall()
+    return [{k: r[k] for k in ("id", "mode", "state", "go_at", "duration_ms")}
+            for r in rows if board_key(r["fen"]) == board_key(fen)]

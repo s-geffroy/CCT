@@ -15,7 +15,7 @@ def _position(client, fen=chess.STARTING_FEN):
 
 
 def _session(client, mode="tree", fen=chess.STARTING_FEN, **extra):
-    r = client.post("/api/v1/sessions", json={"position_id": _position(client, fen)["id"], "mode": mode, **extra})
+    r = client.post("/api/v1/sessions", json={"position_id": _position(client, fen)["id"], "mode": mode, "start": True, **extra})
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -35,7 +35,7 @@ def _sans(view):
 
 def test_tree_mode_builds_branches_from_a_legal_parent(client):
     s = _session(client)
-    assert s["state"] == "active" and s["revision"] == 1 and not s["can_undo"]
+    assert s["state"] == "active" and s["revision"] == 2 and not s["can_undo"]  # creation, puis Go
     e4 = _add(client, s, "e4")
     s = e4["session"]
     # SAN calcule par le serveur, meme si le client envoie de l'UCI.
@@ -46,7 +46,7 @@ def test_tree_mode_builds_branches_from_a_legal_parent(client):
     assert _sans(s) == ["c5", "d4", "e4", "e5"]
     roots = [n for n in s["tree"]["nodes"].values() if n["parent_id"] is None]
     assert sorted((n["move_san"], n["order_index"]) for n in roots) == [("d4", 1), ("e4", 0)]
-    assert s["revision"] == 5 and s["can_undo"]
+    assert s["revision"] == 6 and s["can_undo"]
 
 
 def test_illegal_move_is_refused_and_tree_is_intact(client):
@@ -63,7 +63,7 @@ def test_stale_revision_is_a_conflict(client):
     _add(client, s, "e4")
     # Meme revision : deuxieme onglet ou double clic.
     r = client.post(f"/api/v1/sessions/{s['id']}/nodes", json={"move": "d4", "expected_revision": s["revision"]})
-    assert r.status_code == 409 and r.json()["error"]["details"]["current_revision"] == 2
+    assert r.status_code == 409 and r.json()["error"]["details"]["current_revision"] == s["revision"] + 1
 
 
 def test_undo_redo_and_redo_branch_is_dropped_on_new_edit(client):
@@ -197,7 +197,7 @@ def test_hostile_client_finds_no_engine_data_before_reveal(client):
         return r
 
     for mode in ("tree", "mental"):
-        s = record(client.post("/api/v1/sessions", json={"position_id": _position(client, USER_FEN)["id"], "mode": mode})).json()
+        s = record(client.post("/api/v1/sessions", json={"position_id": _position(client, USER_FEN)["id"], "mode": mode, "start": True})).json()
         if mode == "tree":
             s = record(client.post(f"/api/v1/sessions/{s['id']}/nodes",
                                    json={"move": "e4", "expected_revision": s["revision"]})).json()["session"]
@@ -269,3 +269,43 @@ def test_unknown_session_and_position(client):
     assert client.get("/api/v1/sessions/00000000-0000-0000-0000-000000000000").status_code == 404
     r = client.post("/api/v1/sessions", json={"position_id": "00000000-0000-0000-0000-000000000000", "mode": "tree"})
     assert r.status_code == 404
+
+
+# ------------------------------------------------------------------- Go
+
+def test_session_waits_for_go_before_anything_runs(client):
+    position = _position(client)
+    s = client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree"}).json()
+    assert s["started"] is False and s["go_at"] is None and "preparation" not in s
+    for r in (client.post(f"/api/v1/sessions/{s['id']}/nodes", json={"move": "e4", "expected_revision": s["revision"]}),
+              client.put(f"/api/v1/sessions/{s['id']}/notes", json={"notes": "x", "expected_revision": s["revision"]}),
+              client.post(f"/api/v1/sessions/{s['id']}/submit", json={"expected_revision": s["revision"]})):
+        assert r.status_code == 409 and r.json()["error"]["code"] == "SESSION_NOT_STARTED"
+    s = client.post(f"/api/v1/sessions/{s['id']}/start", json={"expected_revision": s["revision"]}).json()
+    assert s["started"] is True and s["go_at"] >= s["started_at"]
+    r = client.post(f"/api/v1/sessions/{s['id']}/start", json={"expected_revision": s["revision"]})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "ALREADY_STARTED"
+    r = client.post(f"/api/v1/sessions/{s['id']}/nodes", json={"move": "e4", "expected_revision": s["revision"]})
+    assert r.status_code == 201
+
+
+def test_unstarted_session_can_be_abandoned(client):
+    s = client.post("/api/v1/sessions", json={"position_id": _position(client)["id"], "mode": "mental"}).json()
+    s = client.post(f"/api/v1/sessions/{s['id']}/abandon", json={"expected_revision": s["revision"]}).json()
+    assert s["state"] == "abandoned" and s["go_at"] is None
+
+
+def test_thinking_time_counts_from_go_and_previous_attempts_are_compared(client):
+    import time
+
+    position = _position(client)
+    first = client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "mental"}).json()
+    time.sleep(0.4)  # avant le Go : ne compte pas
+    first = client.post(f"/api/v1/sessions/{first['id']}/start", json={"expected_revision": first["revision"]}).json()
+    first = client.post(f"/api/v1/sessions/{first['id']}/submit", json={"expected_revision": first["revision"]}).json()
+    assert first["duration_ms"] < 400
+    assert first["previous_attempts"] == []
+    second = client.post("/api/v1/sessions", json={"position_id": position["id"], "mode": "tree", "start": True}).json()
+    assert "previous_attempts" not in second  # rien pendant la seance
+    second = client.post(f"/api/v1/sessions/{second['id']}/submit", json={"expected_revision": second["revision"]}).json()
+    assert [(a["id"], a["duration_ms"]) for a in second["previous_attempts"]] == [(first["id"], first["duration_ms"])]

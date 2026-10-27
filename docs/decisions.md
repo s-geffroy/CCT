@@ -31,7 +31,7 @@ Le doc 14 demande de les consigner ici.
 | Réf. | Problème | Correction |
 |---|---|---|
 | B1 | Seuil Windows 22000 (doc 16) contre 22631 (modèle) | un seul seuil : 22631 (Win11 23H2) |
-| B2 | `TotalPhysicalMemory < 8GB` rejette les PC « 8 Go » | seuil 7,5 Gio, avertissement en dessous de 8 |
+| B2 | `TotalPhysicalMemory < 8GB` rejette les PC « 8 Go » | minimum 4 Go (celui de Docker Desktop) ; sous 7,5 Gio, configuration allégée (conteneur 1 Go, hachage 64 Mo) : le moteur calcule pendant la réflexion du joueur (retour du propriétaire, 27/10) |
 | B3 | `start.ps1`/`stop.ps1` relancent `verify.ps1` complet | contrôle léger : Docker joignable |
 | B4 | update, backup et uninstall n'ont pas de lanceur `.cmd` | ajouter `METTRE_A_JOUR.cmd`, `SAUVEGARDER.cmd`, `DESINSTALLER.cmd` |
 | B5 | healthcheck Docker sur `/ready` : moteur KO → conteneur unhealthy | Docker sur `/live` ; l'installateur lit `/ready` et signale « moteur indisponible » |
@@ -146,3 +146,20 @@ Le doc 14 demande de les consigner ici.
 - **Tests PowerShell sur le VPS** : service `pwsh` (PowerShell 7, Pester 5.7.1,
   PSScriptAnalyzer 1.25.0 avec la règle de syntaxe compatible 5.1). Ils ne remplacent
   ni le runner Windows ni un vrai PC.
+
+## Bouton Go (retour du propriétaire, 27/10)
+
+- Une séance créée est **prête, pas lancée** : ni position affichée, ni chronomètre,
+  ni moteur. **Go** fixe `go_at` (début du temps de réflexion) et lance la référence
+  Stockfish : le moteur calcule pendant que le joueur réfléchit.
+- Le chronomètre n'est **jamais affiché** pendant la séance ; la durée (depuis le Go)
+  apparaît après la soumission, avec celles des tentatives précédentes sur le même
+  échiquier.
+- Pas de nouvel état de séance (`draft`) : `active` + `go_at` vide, pour ne pas
+  reconstruire la table des séances et ses triggers d'immuabilité (migration 0005,
+  colonnes ajoutées). Les mutations sont refusées avant le Go (409
+  `SESSION_NOT_STARTED`) ; l'abandon reste possible.
+- Choix d'interface : la position est masquée jusqu'au Go (sinon le temps de
+  réflexion mesuré n'aurait pas de sens).
+- API : `POST /sessions/{id}/start` ; `POST /sessions` accepte `start: true` (Go
+  immédiat, pour les clients d'API et les tests).

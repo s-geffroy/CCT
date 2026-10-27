@@ -8,7 +8,9 @@ le réseau.
 ## Ce qu'il faut
 
 - Windows 11 64 bits (version 23H2 ou plus récente), processeur Intel ou AMD.
-- 8 Go de mémoire, 5 Go d'espace libre.
+- 4 Go de mémoire au minimum (le minimum de Docker Desktop), 8 Go recommandés ; 5 Go
+  d'espace libre. Sous 8 Go, l'installation passe en configuration allégée : Stockfish
+  calcule plus lentement, mais il calcule pendant que vous réfléchissez.
 - **Docker Desktop**, avec WSL 2 et les conteneurs Linux (choix par défaut).
   S'il manque, `INSTALLER.cmd` **propose de l'installer** pour vous (installateur
   officiel de Docker via `winget`), comme WSL 2 (`wsl --install`), toujours avec

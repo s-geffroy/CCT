@@ -283,3 +283,19 @@ Describe 'Scripts' {
         }
     }
 }
+
+Describe 'Get-ResourceProfile' {
+    It '8 Go et plus : configuration standard, un coeur garde pour Windows' {
+        $p = Get-ResourceProfile (16GB) 8
+        $p.APP_MEMORY | Should -Be '2g'; $p.ENGINE_HASH_MB | Should -Be '128'; $p.APP_CPUS | Should -Be '2.0'; $p.Light | Should -BeFalse
+    }
+    It 'moins de 8 Go : installation possible, configuration allegee' {
+        $p = Get-ResourceProfile (6GB) 4
+        $p.APP_MEMORY | Should -Be '1g'; $p.ENGINE_HASH_MB | Should -Be '64'; $p.Light | Should -BeTrue
+        (Get-ResourceProfile (3.8GB) 2).APP_CPUS | Should -Be '1.0'
+        (Get-ResourceProfile (3.8GB) 2).ENGINE_THREADS | Should -Be '1'
+    }
+    It 'sous 4 Go (minimum de Docker Desktop) : refus explique' {
+        { Get-ResourceProfile (3GB) 4 } | Should -Throw '*4 Go*'
+    }
+}
