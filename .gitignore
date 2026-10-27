@@ -10,3 +10,6 @@ __pycache__/
 node_modules/
 dist/
 tests/e2e/results/
+
+# Suivi local de la CI (jamais commite)
+.ci-*
