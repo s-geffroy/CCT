@@ -13,6 +13,7 @@ import chess.engine
 
 from ..log import get_logger
 from ..settings import Settings
+from . import locate as locator
 
 log = get_logger("engine")
 
@@ -47,6 +48,27 @@ class EngineManager:
         self.threads = settings.engine_threads
         self.hash_mb = settings.engine_hash_mb
         self.pending: dict | None = None  # reglage demande, pas encore applique
+        # Moteur choisi par `locate()` (Lot 7) et candidats refuses, pour l'interface.
+        self.path: str | None = None
+        self.source: str | None = None
+        self.rejected: list[locator.Probe] = []
+
+    async def locate(self, user_path: str | None) -> None:
+        found = await locator.locate(user_path, self.settings.stockfish_path, self.settings.data_dir)
+        self.rejected = found.rejected
+        self.path = found.chosen.path if found.chosen else None
+        self.source = found.chosen.source if found.chosen else None
+        for r in found.rejected:
+            log.warning("moteur ecarte (%s) : %s : %s", r.source, r.path, r.reason)
+        if self.path is None:
+            log.warning("aucun Stockfish utilisable : seances B/C seulement, telechargement propose")
+
+    def _build_info(self) -> dict[str, str]:
+        build = read_build_info(self.settings.stockfish_build_info) if self.source == "environnement" else {}
+        if not build.get("net_sha256") and self.path:
+            # Moteur natif : son empreinte fait son identite (cle de cache).
+            build = {"binary_sha256": locator.file_sha256(self.path), "source": self.source or ""}
+        return build
 
     @property
     def engine(self) -> chess.engine.UciProtocol:
@@ -55,8 +77,12 @@ class EngineManager:
         return self._engine
 
     async def start(self) -> None:
+        if self.path is None:
+            self._engine, self.info = None, None
+            self.last_error = "aucun moteur Stockfish installe"
+            return
         try:
-            _transport, engine = await chess.engine.popen_uci(self.settings.stockfish_path)
+            _transport, engine = await chess.engine.popen_uci(self.path)
             await engine.configure({"Threads": self.threads, "Hash": self.hash_mb})
             self._engine = engine
             self.info = EngineInfo(
@@ -64,7 +90,7 @@ class EngineManager:
                 author=engine.id.get("author", ""),
                 threads=self.threads,
                 hash_mb=self.hash_mb,
-                build=read_build_info(self.settings.stockfish_build_info),
+                build=await asyncio.to_thread(self._build_info),
             )
             self.last_error = None
             log.info("moteur demarre : %s (threads=%d, hash=%d Mo)",

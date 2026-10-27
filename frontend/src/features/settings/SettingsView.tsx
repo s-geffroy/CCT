@@ -3,11 +3,12 @@
 // recherche en cours.
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { ApiFailure, settingsApi, type SettingField, type SettingsValues } from '../../api/client';
+import { ApiFailure, engineApi, settingsApi, type SettingField, type SettingsValues } from '../../api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { EnginePanel } from './EnginePanel';
 import { usePrefs } from './prefs';
 
 const GROUPS: Record<SettingField['group'], { title: string; help: string }> = {
@@ -21,10 +22,11 @@ const GROUPS: Record<SettingField['group'], { title: string; help: string }> = {
 const CHOICE_LABEL: Record<string, string> = { white: 'Blancs (par defaut)', side_to_move: 'Camp au trait' };
 
 export function SettingsView() {
-  const { view, setView } = usePrefs();
+  const { view, setView, reload } = usePrefs();
   const [draft, setDraft] = useState<Partial<Record<keyof SettingsValues, string>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [panelKey, setPanelKey] = useState(0);
 
   useEffect(() => {
     if (view) setDraft(Object.fromEntries(Object.entries(view.values).map(([k, v]) => [k, String(v)])));
@@ -40,13 +42,15 @@ export function SettingsView() {
     if (!reset) {
       for (const f of fields) {
         const raw = draft[f.key as keyof SettingsValues] ?? '';
-        const value = f.choices ? raw : Number(raw);
+        const value = f.choices || f.kind === 'text' ? raw.trim() : Number(raw);
         if (value !== view!.values[f.key as keyof SettingsValues]) patch[f.key] = value;
       }
     }
     try {
       // Un champ a la fois en cas d'erreur : le serveur nomme le reglage fautif.
       setView(await settingsApi.put(reset ? { reset: true } : patch));
+      // Nouveau chemin de moteur : on le cherche tout de suite.
+      if (reset || 'engine_path' in patch) { await engineApi.rescan().catch(() => undefined); setPanelKey((k) => k + 1); }
       toast.success(reset ? 'Reglages par defaut retablis.' : 'Reglages enregistres.');
     } catch (err) {
       if (err instanceof ApiFailure) {
@@ -65,6 +69,7 @@ export function SettingsView() {
   return (
     <section aria-label="Reglages" className="max-w-3xl">
       <h2>Reglages</h2>
+      <EnginePanel key={panelKey} onChange={reload} />
       <form noValidate onSubmit={(e) => { e.preventDefault(); void save(); }} className="flex flex-col gap-4">
         {(Object.keys(GROUPS) as SettingField['group'][]).map((group) => (
           <fieldset key={group} className="!block">
@@ -75,19 +80,24 @@ export function SettingsView() {
                 const id = `setting-${f.key}`;
                 const value = draft[f.key as keyof SettingsValues] ?? '';
                 return (
-                  <div key={f.key} className="grid gap-1">
+                  <div key={f.key} className={f.kind === 'text' ? 'grid gap-1 sm:col-span-2' : 'grid gap-1'}>
                     <Label htmlFor={id}>{f.label}{f.unit ? ` (${f.unit})` : ''}</Label>
                     {f.choices ? (
                       <NativeSelect id={id} value={value} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}>
                         {f.choices.map((c) => <NativeSelectOption key={c} value={c}>{CHOICE_LABEL[c] ?? c}</NativeSelectOption>)}
                       </NativeSelect>
+                    ) : f.kind === 'text' ? (
+                      <Input id={id} type="text" spellCheck={false} value={value}
+                             placeholder="C:\Program Files\Stockfish\stockfish.exe"
+                             aria-invalid={errors[f.key] ? true : undefined} aria-describedby={`${id}-help`}
+                             onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
                     ) : (
                       <Input id={id} type="number" inputMode="numeric" min={f.minimum} max={f.maximum} value={value}
                              aria-invalid={errors[f.key] ? true : undefined} aria-describedby={`${id}-help`}
                              onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
                     )}
                     <span id={`${id}-help`} className="text-xs text-muted-foreground">
-                      {f.choices ? '' : `de ${f.minimum} a ${f.maximum} · defaut ${f.default}`}
+                      {f.kind === 'text' ? 'Enregistrer relance la recherche du moteur.' : f.choices ? '' : `de ${f.minimum} a ${f.maximum} · defaut ${f.default}`}
                     </span>
                     {errors[f.key] && <span role="alert" className="text-sm text-destructive">{errors[f.key]}</span>}
                   </div>

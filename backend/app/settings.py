@@ -41,7 +41,8 @@ def _default_threads() -> int:
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.environ.get("APP_DATA_DIR", "/data")))
     static_dir: Path = field(default_factory=lambda: Path(os.environ.get("APP_STATIC_DIR", "/app/static")))
-    stockfish_path: str = field(default_factory=lambda: os.environ.get("STOCKFISH_PATH", "/usr/local/bin/stockfish"))
+    # Chemin impose (image Docker) ; sinon le moteur est cherche puis propose au telechargement.
+    stockfish_path: str | None = field(default_factory=lambda: os.environ.get("STOCKFISH_PATH") or None)
     stockfish_build_info: Path = Path("/usr/share/doc/stockfish/stockfish-build.txt")
     engine_threads: int = field(default_factory=lambda: _int_env("ENGINE_THREADS", _default_threads(), 1, 64))
     engine_hash_mb: int = field(default_factory=lambda: _int_env("ENGINE_HASH_MB", 128, 16, 4096))

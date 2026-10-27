@@ -51,8 +51,13 @@ class Field:
     maximum: int | None = None
     choices: tuple[str, ...] | None = None
     unit: str | None = None
+    text: bool = False  # texte libre (chemin), au plus 500 caracteres
 
     def check(self, value) -> int | str:
+        if self.text:
+            if not isinstance(value, str) or len(value) > 500 or "\n" in value:
+                raise InvalidInput("SETTING_INVALID", f"« {self.label} » : texte d'une ligne, 500 caracteres au plus.", {"key": self.key})
+            return value.strip()
         if self.choices is not None:
             if value not in self.choices:
                 raise InvalidInput("SETTING_INVALID", f"« {self.label} » : valeur inconnue.",
@@ -68,6 +73,9 @@ class Field:
 
     def describe(self) -> dict:
         out = {"key": self.key, "group": self.group, "label": self.label, "default": self.default}
+        if self.text:
+            out["kind"] = "text"
+            return out
         if self.choices is not None:
             out["choices"] = list(self.choices)
         else:
@@ -81,6 +89,7 @@ def build_fields(s: Settings) -> list[Field]:
     return [
         Field("engine_threads", "moteur", "Threads Stockfish", min(s.engine_threads, threads_max), 1, threads_max),
         Field("engine_hash_mb", "moteur", "Table de hachage", min(s.engine_hash_mb, hash_max), 16, hash_max, unit="Mo"),
+        Field("engine_path", "moteur", "Chemin d'un Stockfish existant (vide : recherche automatique)", "", text=True),
         Field("study_depth", "etude", "Profondeur cible (etude libre)", 21, 8, 32),
         Field("study_multipv", "etude", "Variantes affichees (MultiPV)", 20, 1, 20),
         Field("study_budget_s", "etude", "Budget d'une analyse", 300, 5, 1800, unit="s"),
