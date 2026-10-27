@@ -171,3 +171,8 @@ rapports dans `tests/e2e/results/` (ignore par git).
   du proprietaire ; elle reste en brouillon (voir `docs/release.md`). Les gates
   W01-W12 restent « non validees » tant qu'aucun rapport d'un vrai PC Windows
   n'est depose sur la branche `validation-windows`.
+- `main` est protegee (ruleset GitHub, sans contournement) : toute modification
+  passe par une branche et une PR. La fusion se fait par
+  `scripts/ci/merge-pr.mjs <numero> <sha>` (conteneur devtools, jeton
+  `github_pat`), qui refuse si le dernier commit differe ou si un check
+  obligatoire n'est pas vert. Aucune autre voie de fusion.

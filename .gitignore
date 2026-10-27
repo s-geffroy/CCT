@@ -13,3 +13,6 @@ tests/e2e/results/
 
 # Suivi local de la CI (jamais commite)
 .ci-*
+
+# Reglages locaux de Claude Code (permissions propres a ce poste)
+.claude/settings.local.json
