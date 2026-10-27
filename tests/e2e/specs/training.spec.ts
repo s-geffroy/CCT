@@ -47,9 +47,11 @@ async function drag(page: Page, from: string, to: string) {
 async function abandonOpenSessions(page: Page) {
   const history = await (await page.request.get('/api/v1/history?limit=200')).json();
   for (const item of history.items as { id: string; state: string; fen: string }[]) {
-    if (item.state !== 'active' || !item.fen.startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w')) continue;
+    if (!['active', 'submitted'].includes(item.state) || !item.fen.startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w')) continue;
     const s = await (await page.request.get(`/api/v1/sessions/${item.id}`)).json();
-    await page.request.post(`/api/v1/sessions/${item.id}/abandon`, { data: { expected_revision: s.revision } });
+    // Une seance soumise ne s'abandonne plus : on la revele (sinon elle masque la reference).
+    const action = item.state === 'active' ? 'abandon' : 'reveal';
+    await page.request.post(`/api/v1/sessions/${item.id}/${action}`, { data: { expected_revision: s.revision } });
   }
 }
 
@@ -172,4 +174,28 @@ test('historique : la seance apparait et se rouvre', async ({ page }) => {
   await page.getByRole('button', { name: 'Abandonner la seance' }).click();
   await page.getByRole('button', { name: 'Oui, abandonner' }).click();
   await expect(page.getByTestId('session-state')).toHaveText('abandonnee');
+});
+
+test('mode B : notes enregistrees au blur puis "J ai termine" aussitot, la soumission passe', async ({ page }) => {
+  // Regression (CI du tag v0.1.2) : deux enregistrements de notes concurrents avec
+  // la meme revision -> 409, puis soumission refusee. Le reseau est ralenti pour
+  // forcer le chevauchement a chaque execution.
+  await page.route('**/api/v1/sessions/*/notes', async (route) => {
+    await new Promise((r) => setTimeout(r, 500));
+    await route.continue();
+  });
+  await retainStart(page);
+  await page.getByRole('button', { name: 'Calcul mental (B)' }).click();
+  await page.getByRole('button', { name: 'Go', exact: true }).click();
+  await page.getByLabel('Mes variantes').fill('1. e4 e5');
+  await page.getByLabel('Notes').fill('course');
+  await page.getByLabel('Notes').blur();
+  await page.getByRole('button', { name: "J'ai termine" }).click();
+  await page.getByRole('button', { name: 'Soumettre ma tentative' }).click();
+  await expect(page.getByTestId('session-state')).toHaveText('soumise (figee)');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  // Ne pas laisser de seance soumise non revelee : elle masquerait la reference des
+  // autres tests sur la meme position (regle anti-spoiler).
+  await page.getByRole('button', { name: 'Reveler' }).click();
+  await expect(page.getByTestId('session-state')).toHaveText('revelee');
 });
