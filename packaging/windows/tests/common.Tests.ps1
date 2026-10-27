@@ -145,11 +145,91 @@ Describe 'Get-DockerState' {
         Mock Resolve-Docker { $false }
         Get-DockerState | Should -Be 'absent'
     }
-    It 'message explicite et lien officiel si Docker est absent' {
+    It 'hors installation : rien n est installe, message et lien officiel' {
         Mock Get-DockerState { 'absent' }
+        Mock Install-DockerDesktop { $true }
         { Assert-DockerReady } | Should -Throw '*Docker Desktop absent*'
+        Should -Invoke Install-DockerDesktop -Times 0
         Mock Get-DockerState { 'windows' }
         { Assert-DockerReady } | Should -Throw '*Linux containers*'
+    }
+}
+
+Describe 'Installation assistee des prerequis' {
+    BeforeEach {
+        Mock Write-Host { }
+        Mock Start-Process { }
+        Mock Start-Sleep { }
+    }
+    It 'Docker absent, accord donne : installation officielle par winget, sans accepter de licence a la place de l utilisateur' {
+        Mock Get-Command { [pscustomobject]@{ Name = 'winget' } } -ParameterFilter { $Name -eq 'winget' }
+        Mock Confirm-Action { $true }
+        Mock Invoke-Winget { 0 }
+        Mock Get-DockerDesktopExe { 'C:\Docker Desktop.exe' }
+        Install-DockerDesktop | Should -BeTrue
+        Should -Invoke Invoke-Winget -Times 1 -ParameterFilter {
+            ($Arguments -join ' ') -eq 'install --exact --id Docker.DockerDesktop --source winget' -and
+            -not ($Arguments -match 'accept')
+        }
+    }
+    It 'Docker absent, accord refuse : rien d installe, gestes affiches et page officielle ouverte' {
+        Mock Get-Command { [pscustomobject]@{ Name = 'winget' } } -ParameterFilter { $Name -eq 'winget' }
+        Mock Confirm-Action { $false }
+        Mock Invoke-Winget { 0 }
+        Mock Show-DockerSteps { }
+        Install-DockerDesktop | Should -BeFalse
+        Should -Invoke Invoke-Winget -Times 0
+        Should -Invoke Show-DockerSteps -Times 1
+        Should -Invoke Start-Process -Times 1 -ParameterFilter { $FilePath -like 'https://docs.docker.com/*' }
+    }
+    It 'Docker installe puis demarre automatiquement : l installation continue dans la meme execution' {
+        $script:states = [System.Collections.Generic.Queue[string]]::new([string[]]@('absent', 'stopped', 'linux'))
+        Mock Get-DockerState { $script:states.Dequeue() }
+        Mock Install-DockerDesktop { $true }
+        Mock Get-DockerDesktopExe { 'C:\Docker Desktop.exe' }
+        Mock Wait-DockerLinux { $true }
+        { Resolve-DockerPrerequisite -Interactive } | Should -Not -Throw
+        Should -Invoke Start-Process -Times 1 -ParameterFilter { $FilePath -eq 'C:\Docker Desktop.exe' }
+    }
+    It 'Docker arrete qui ne demarre pas : message clair' {
+        Mock Get-DockerState { 'stopped' }
+        Mock Get-DockerDesktopExe { 'C:\Docker Desktop.exe' }
+        Mock Wait-DockerLinux { $false }
+        { Resolve-DockerPrerequisite } | Should -Throw '*ne repond toujours pas*'
+    }
+    It 'conteneurs Windows : bascule vers Linux seulement avec accord' {
+        Mock Get-DockerState { 'windows' }
+        Mock Test-Path { $true } -ParameterFilter { $LiteralPath -like '*DockerCli.exe' }
+        Mock Confirm-Action { $false }
+        { Resolve-DockerPrerequisite -Interactive } | Should -Throw '*Switch to Linux containers*'
+    }
+    It 'WSL absent, accord donne : wsl --install avec elevation UAC, puis redemarrage demande' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'wsl.exe' }
+        Mock Confirm-Action { $true }
+        Mock Invoke-Elevated { 0 }
+        Resolve-WslPrerequisite | Should -Be 'reboot'
+        Should -Invoke Invoke-Elevated -Times 1 -ParameterFilter { $FilePath -eq 'wsl.exe' -and ($Arguments -join ' ') -eq '--install --no-distribution' }
+    }
+    It 'WSL absent, accord refuse : gestes precis, rien d execute' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'wsl.exe' }
+        Mock Confirm-Action { $false }
+        Mock Invoke-Elevated { 0 }
+        { Resolve-WslPrerequisite } | Should -Throw '*wsl --install --no-distribution*'
+        Should -Invoke Invoke-Elevated -Times 0
+    }
+    It 'WSL present et a jour : rien a faire' {
+        Mock Get-Command { [pscustomobject]@{ Name = 'wsl.exe' } } -ParameterFilter { $Name -eq 'wsl.exe' }
+        Mock Invoke-Wsl { 0 }
+        Mock Confirm-Action { throw 'aucune question attendue' }
+        Resolve-WslPrerequisite | Should -Be 'ok'
+    }
+    It 'accord : seules les reponses oui sont prises pour un accord' {
+        Mock Read-Host { 'o' }
+        Confirm-Action '?' | Should -BeTrue
+        Mock Read-Host { '' }
+        Confirm-Action '?' | Should -BeFalse
+        Mock Read-Host { 'non' }
+        Confirm-Action '?' | Should -BeFalse
     }
 }
 

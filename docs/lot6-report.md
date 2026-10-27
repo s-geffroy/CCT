@@ -20,6 +20,10 @@ G06 et W01 à W12 sont **non validées** à ce jour.
   - `METTRE_A_JOUR`, `SAUVEGARDER`, `RESTAURER` ;
   - `DESINSTALLER`, `COLLECTER_DIAGNOSTIC`.
 - Les scripts PowerShell, dont toute la logique testable est dans `common.ps1` :
+  - **prérequis manquants proposés** : WSL 2 (`wsl --install`, fenêtre UAC) et Docker
+    Desktop (installateur officiel via `winget`, sans jamais accepter de licence à la
+    place de l'utilisateur), démarrage automatique de Docker, bascule vers les
+    conteneurs Linux ; en cas de refus, gestes pas à pas et lien officiel ;
   - **installation** : prérequis, refus d'une autre version, port occupé détecté,
     image par digest, attente de `/live` puis `/ready` (moteur indisponible
     signalé sans échec), raccourci Bureau ;
@@ -70,7 +74,7 @@ G06 et W01 à W12 sont **non validées** à ce jour.
 |---|---|
 | pytest (image finale, vrai Stockfish) | **141/141** (+5 : sauvegarde cohérente pendant l'exécution, vérification, restauration au démarrage, fichier invalide écarté, CLI) |
 | vitest | **24/24** |
-| scripts Windows (PowerShell 7, service `pwsh`) | analyse statique : **0 problème** (dont syntaxe compatible 5.1) ; Pester **24/24** |
+| scripts Windows (PowerShell 7, service `pwsh`) | analyse statique : **0 problème** (dont syntaxe compatible 5.1) ; Pester **33/33** |
 | Playwright | **52/52** |
 | ZIP Windows | fabriqué et relu : 24 fichiers, manifeste par digest, digest invalide refusé |
 

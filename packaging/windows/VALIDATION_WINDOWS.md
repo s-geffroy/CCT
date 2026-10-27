@@ -11,8 +11,8 @@ qui était attendu (une phrase suffit). Un KO est aussi utile qu'un OK.
 | ID | Scénario | Gestes | Résultat attendu | Résultat |
 |---|---|---|---|---|
 | W01 | Docker Desktop déjà prêt | extraire le ZIP, double-clic `INSTALLER.cmd` | « Installation terminée », navigateur ouvert sur l'application, raccourci sur le Bureau | |
-| W02 | Docker Desktop absent (autre PC ou VM) | double-clic `INSTALLER.cmd` | message + lien officiel Docker ; rien d'installé ; pas de « réussite » | |
-| W03 | Docker arrêté, puis en mode conteneurs Windows | quitter Docker Desktop, `INSTALLER.cmd` ; puis *Switch to Windows containers*, `INSTALLER.cmd` | message clair dans chaque cas ; vos autres conteneurs Docker intacts | |
+| W02 | Docker Desktop (et WSL) absents (autre PC ou VM) | double-clic `INSTALLER.cmd`, répondre N, puis relancer et répondre O | N : gestes + lien officiel, rien d'installé ; O : installation officielle (fenêtre UAC), redémarrage demandé pour WSL, puis l'installation reprend | |
+| W03 | Docker arrêté, puis en mode conteneurs Windows | quitter Docker Desktop, `INSTALLER.cmd` ; puis *Switch to Windows containers*, `INSTALLER.cmd` | Docker démarré automatiquement ; bascule vers Linux proposée ; vos autres conteneurs Docker intacts | |
 | W04 | Réinstallation même version | faire une séance, puis relancer `INSTALLER.cmd` | aucune erreur ; la séance est toujours dans l'Historique | |
 | W05 | Autre version via `INSTALLER.cmd` | lancer `INSTALLER.cmd` d'une autre version | refus, renvoi vers `METTRE_A_JOUR.cmd` | |
 | W06 | Arrêt | `ARRETER.cmd`, puis le raccourci du Bureau | arrêt, puis redémarrage avec les données | |

@@ -10,10 +10,16 @@ le réseau.
 - Windows 11 64 bits (version 23H2 ou plus récente), processeur Intel ou AMD.
 - 8 Go de mémoire, 5 Go d'espace libre.
 - **Docker Desktop**, avec WSL 2 et les conteneurs Linux (choix par défaut).
-  Installation officielle :
+  S'il manque, `INSTALLER.cmd` **propose de l'installer** pour vous (installateur
+  officiel de Docker via `winget`), comme WSL 2 (`wsl --install`), toujours avec
+  votre accord et la fenêtre d'autorisation de Windows ; si vous refusez, il
+  affiche les gestes à faire. Il démarre Docker Desktop s'il est arrêté et propose
+  de passer en conteneurs Linux si besoin. Page officielle :
   https://docs.docker.com/desktop/setup/install/windows-install/
-  Docker Desktop a ses propres conditions de licence : lisez-les et acceptez-les
-  vous-même au premier démarrage.
+  Docker Desktop a ses propres conditions de licence : c'est **vous** qui les lisez
+  et les acceptez au premier démarrage (le script ne le fait jamais à votre place).
+  Après l'installation de WSL, Windows doit redémarrer : relancez ensuite
+  `INSTALLER.cmd`, il reprend où il en était.
 
 Aucun autre logiciel n'est nécessaire (ni Python, ni Node, ni Git).
 
