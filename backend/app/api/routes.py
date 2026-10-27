@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict
-from importlib.metadata import version
 
+import chess
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
@@ -54,7 +54,8 @@ async def meta(request: Request) -> dict:
     db = request.app.state.db
     return {
         "app_version": APP_VERSION,
-        "python_chess_version": version("chess"),
+        # Attribut du module : l'installateur Windows extrait python-chess sans ses metadonnees.
+        "python_chess_version": chess.__version__,
         "schema_version": db.version,
         "engine": asdict(info) if info else None,
         "capabilities": {

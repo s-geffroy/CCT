@@ -61,6 +61,8 @@ try {
     if ($page.Content -notmatch '<div id="root"') { throw 'Interface non servie' }
     $version = (Invoke-Api GET '/api/v1/health/live')
     Write-Host ('   ' + ($version | ConvertTo-Json -Compress))
+    $meta = Invoke-Api GET '/api/v1/meta'
+    Write-Host ('   version ' + $meta.app_version + ', python-chess ' + $meta.python_chess_version)
 
     Step 'Moteur : existant ou telechargement de la release officielle'
     $engine = Invoke-Api GET '/api/v1/engine'
