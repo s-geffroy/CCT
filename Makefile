@@ -16,7 +16,9 @@ test:
 
 # Dependances de l'installateur natif : exactement uv.lock (versions et empreintes).
 windows-requirements:
-	docker run --rm -v "$(CURDIR)/backend:/b:ro" -w /b ghcr.io/astral-sh/uv:0.13.5 \
+	# Image distroless : pas de /tmp, ou uv ecrit un fichier temporaire.
+	docker run --rm --tmpfs /tmp -v "$(CURDIR)/backend:/b:ro" -w /b \
+	  ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff \
 	  export --frozen --no-dev --no-emit-project --format requirements-txt --no-cache \
 	  | diff -u packaging/windows-native/requirements.txt -
 
