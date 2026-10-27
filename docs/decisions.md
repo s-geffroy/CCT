@@ -163,3 +163,50 @@ Le doc 14 demande de les consigner ici.
   réflexion mesuré n'aurait pas de sens).
 - API : `POST /sessions/{id}/start` ; `POST /sessions` accepte `start: true` (Go
   immédiat, pour les clients d'API et les tests).
+
+## Lot 7 : installateur Windows natif (décision du propriétaire, 27/10)
+
+- **Le paquet Docker Windows (Lot 6) est remplacé** par un installateur natif : ni
+  Docker Desktop, ni WSL, ni droits administrateur, ni redémarrage. L'image Docker
+  reste celle du VPS (développement, tests) et d'un éventuel serveur. Les scripts
+  `.cmd`/`.ps1` du Lot 6 sont retirés du dépôt ; les anciennes releases les gardent.
+- **Moteur** (`engine/locate.py`, `engine/download.py`) : on utilise d'abord un
+  Stockfish existant (réglage, `STOCKFISH_PATH`, `PATH`, dossiers habituels), vérifié
+  par une poignée de main UCI et exigé en version 16 ou plus. Sinon, l'utilisateur
+  peut télécharger la release officielle `sf_19`. **Écart à la note du 27/10**
+  (variante AVX2 sinon base) : l'archive `universal` officielle choisit elle-même au
+  lancement, donc une seule archive et une seule empreinte par OS. L'empreinte est
+  vérifiée avant toute extraction, et l'installation est atomique.
+- **Lanceur** (`app/desktop.py`) : une instance par utilisateur (verrou du système,
+  libéré à la mort du processus) ; port 8765, sinon un voisin, sinon un port du
+  système, toujours sur `127.0.0.1`. L'arrêt passe par `POST /api/v1/desktop/shutdown`,
+  protégé par un jeton aléatoire écrit dans le dossier de données. Ces routes
+  n'existent pas dans l'image Docker. `app.main:app` est construit à la première
+  demande, pour que le lanceur importe le module sans créer d'application sur `/data`.
+- **Données** dans `%LOCALAPPDATA%\Chess Calculation Trainer\data`, un dossier
+  **distinct** de `%LOCALAPPDATA%\ChessCalculationTrainer` (paquet Docker v0.1.x) :
+  le désinstalleur Docker efface sa racine, sauf `backups\`. Au premier lancement
+  natif sans base, la dernière sauvegarde Docker y est reprise, puis vérifiée par la
+  restauration du démarrage.
+- **Installateur** : Inno Setup 7.1.0, par utilisateur
+  (`%LOCALAPPDATA%\Programs\ChessCalculationTrainer`), avec le Python 3.13.17
+  embarqué officiel. Python, pip et Inno Setup sont épinglés par SHA-256.
+  Dépendances : `uv.lock` exporté avec empreintes (`--require-hashes`, wheels
+  `win_amd64` seulement), contrôlé en CI contre le lockfile. `python-chess`
+  1.11.2 n'existe qu'en sources (pur Python) : son archive, à la même empreinte que
+  `uv.lock`, est extraite sans compilation. `/api/v1/meta` lit donc la version sur le
+  module (`chess.__version__`), sans métadonnées de paquet.
+- **Mise à jour** : l'installateur arrête l'instance proprement (`--stop`), puis
+  remplace le programme. Les données ne sont jamais touchées, et le backend
+  sauvegarde la base avant toute migration. Pas de retour arrière automatique du
+  programme (contrairement au Lot 6) : réinstaller la version précédente suffit, et
+  la base reste compatible tant qu'aucune migration n'a eu lieu.
+- **Signature de code : plus tard.** SmartScreen avertit ; la CI prévoit la place
+  d'une étape `signtool`.
+- **CI** : le job `windows-installer` installe **réellement** sur le runner Windows,
+  démarre via `pythonw` comme le raccourci, télécharge Stockfish, analyse, contrôle
+  l'instance unique et la reprise d'une sauvegarde Docker, réinstalle par-dessus
+  l'application ouverte, puis désinstalle en vérifiant que les données restent. C'est
+  le troisième check obligatoire du ruleset.
+- **Limite connue** : le journal contient des chemins de fichiers, donc le nom du
+  compte Windows. Aucun secret, aucun contenu de séance.

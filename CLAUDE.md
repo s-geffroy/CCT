@@ -25,6 +25,10 @@ les labels a la main.
 - Un seul processus Uvicorn (`--workers 1`) : le planificateur Stockfish vit
   dans ce processus. Ne jamais en lancer plusieurs.
 - Un seul processus Stockfish, jamais partage sans `EngineManager.lock`.
+- Moteur choisi par `EngineManager.locate()` (reglage, `STOCKFISH_PATH`, PATH,
+  dossiers habituels, moteur telecharge ; Stockfish 16+ verifie en UCI). Un
+  telechargement (`engine/catalog.py`) est toujours verifie par SHA-256 AVANT
+  extraction ; changer de release = changer version ET empreintes ensemble.
 - **Une panne moteur ne tue pas le serveur** : `/api/v1/health/live` reste vert,
   `/api/v1/health/ready` passe en 503. Les modes B/C marchent sans moteur.
 - Le healthcheck Docker lit `/live` (le processus repond), pas `/ready`.
@@ -156,17 +160,28 @@ rapports dans `tests/e2e/results/` (ignore par git).
    Stockfish 19`), pas seulement que le conteneur tourne ;
 6. signaler tout echec restant sans le masquer.
 
-## Publication et paquet Windows
+## Publication et installateur Windows
 
 - `Makefile` et `scripts/ci/*.sh` utilisent `docker` directement : ils sont faits
   pour le runner GitHub, **jamais** a lancer sur ce VPS (passer par appctl).
-- Scripts Windows (`packaging/windows/*.ps1`, `*.cmd`) : ASCII uniquement et fins
-  de ligne CRLF (`.gitattributes`), compatibles Windows PowerShell 5.1 ;
-  `sudo appctl run pwsh` doit rester vert. Toute logique testable va dans
-  `common.ps1`, avec un test Pester.
-- Les donnees de l'utilisateur ne sont jamais detruites par defaut : pas de
-  `down -v`, sauvegarde verifiee avant toute mise a jour, retour arriere
-  automatique si la nouvelle version ne demarre pas.
+- Installateur Windows natif (`packaging/windows/`, Lot 7) : sans Docker ni droits
+  administrateur. Scripts `.ps1`/`.iss` en ASCII et CRLF (`.gitattributes`),
+  compatibles Windows PowerShell 5.1 (pas de guillemets doubles imbriques dans les
+  arguments d'un programme externe) ; `sudo appctl run pwsh` doit rester vert. Toute
+  logique testable va dans `native.ps1`, avec un test Pester. Le vrai test est le
+  job CI `windows-installer` (installation reelle sur le runner Windows).
+- Toute source telechargee par la construction (Python embarque, pip, Inno Setup,
+  python-chess) est epinglee par version ET SHA-256 dans `native.ps1`. Les
+  dependances Python = `uv.lock` : apres `uv lock`, regenerer
+  `packaging/windows/requirements.txt` (commande dans `docs/release.md`), sinon la
+  CI echoue.
+- Lanceur (`backend/app/desktop.py`) : une instance, `127.0.0.1` seulement ; les
+  routes `/api/v1/desktop/*` n'existent que sous le lanceur (jeton). Les donnees
+  natives vivent dans `%LOCALAPPDATA%\Chess Calculation Trainer\data`, jamais sous
+  `%LOCALAPPDATA%\ChessCalculationTrainer` (racine de l'ancien paquet Docker, que
+  son desinstalleur efface).
+- Les donnees de l'utilisateur ne sont jamais detruites : ni l'installateur ni la
+  desinstallation n'y touchent ; la base est sauvegardee avant toute migration.
 - Une release ne se fait que par un tag `vX.Y.Z` pousse avec l'accord explicite
   du proprietaire ; elle reste en brouillon (voir `docs/release.md`). Les gates
   W01-W12 restent « non validees » tant qu'aucun rapport d'un vrai PC Windows
@@ -174,5 +189,6 @@ rapports dans `tests/e2e/results/` (ignore par git).
 - `main` est protegee (ruleset GitHub, sans contournement) : toute modification
   passe par une branche et une PR. La fusion se fait par
   `scripts/ci/merge-pr.mjs <numero> <sha>` (conteneur devtools, jeton
-  `github_pat`), qui refuse si le dernier commit differe ou si un check
-  obligatoire n'est pas vert. Aucune autre voie de fusion.
+  `github_pat`), qui refuse si le dernier commit differe ou si l'un des trois
+  checks obligatoires (tests, scripts Windows, installateur Windows natif)
+  n'est pas vert. Aucune autre voie de fusion.

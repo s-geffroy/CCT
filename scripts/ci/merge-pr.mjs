@@ -10,6 +10,7 @@ const REPO = 's-geffroy/CCT';
 const REQUIRED_CHECKS = [
   'tests (pytest, vitest, image finale, Playwright)',
   'scripts Windows (PSScriptAnalyzer, Pester, PowerShell 5.1)',
+  'installateur Windows natif (construction, installation, smoke)',
 ];
 const [number, expectedSha] = process.argv.slice(2);
 const refuse = (why) => { console.log(`REFUS : ${why}`); process.exit(1); };

@@ -1,43 +1,46 @@
-# Fiche de validation Windows (gates W01 à W12)
+# Fiche de validation Windows (gates W01 à W12) : installateur natif
 
-À remplir sur un **vrai PC Windows 11 x64**. Une case par test : **OK**, **KO**
-ou **non testé**. Pour chaque KO : ce que vous avez fait, ce que vous avez vu, ce
-qui était attendu (une phrase suffit). Un KO est aussi utile qu'un OK.
+À remplir sur un **vrai PC Windows 11 x64**. Pour chaque test, notez **OK**, **KO**
+ou **non testé**. Pour chaque KO, décrivez en une phrase ce que vous avez fait, ce que
+vous avez vu et ce qui était attendu. Un KO est aussi utile qu'un OK.
 
-- Version testée : `v____` (nom du ZIP)
+La CI fait déjà tourner une installation automatique sur un Windows de GitHub :
+installation silencieuse, Stockfish téléchargé, analyse, mise à jour,
+désinstallation. Cette fiche couvre ce qu'elle ne voit pas : SmartScreen, le
+navigateur, les raccourcis, un vrai compte et un vrai réseau.
+
+- Version testée : `v____` (nom du `Setup`)
 - Date : ____
-- PC : (modèle, processeur, mémoire)
+- PC : modèle, processeur, mémoire ; antivirus autre que Defender ? ____
 
 | ID | Scénario | Gestes | Résultat attendu | Résultat |
 |---|---|---|---|---|
-| W01 | Docker Desktop déjà prêt | extraire le ZIP, double-clic `INSTALLER.cmd` | « Installation terminée », navigateur ouvert sur l'application, raccourci sur le Bureau | |
-| W02 | Docker Desktop (et WSL) absents (autre PC ou VM) | double-clic `INSTALLER.cmd`, répondre N, puis relancer et répondre O | N : gestes + lien officiel, rien d'installé ; O : installation officielle (fenêtre UAC), redémarrage demandé pour WSL, puis l'installation reprend | |
-| W03 | Docker arrêté, puis en mode conteneurs Windows | quitter Docker Desktop, `INSTALLER.cmd` ; puis *Switch to Windows containers*, `INSTALLER.cmd` | Docker démarré automatiquement ; bascule vers Linux proposée ; vos autres conteneurs Docker intacts | |
-| W04 | Réinstallation même version | faire une séance, puis relancer `INSTALLER.cmd` | aucune erreur ; la séance est toujours dans l'Historique | |
-| W05 | Autre version via `INSTALLER.cmd` | lancer `INSTALLER.cmd` d'une autre version | refus, renvoi vers `METTRE_A_JOUR.cmd` | |
-| W06 | Arrêt | `ARRETER.cmd`, puis le raccourci du Bureau | arrêt, puis redémarrage avec les données | |
-| W07 | Local uniquement | depuis un téléphone sur le même Wi-Fi : `http://<IP-du-PC>:8765` | page inaccessible | |
-| W08 | Compte avec accent ou espace | session Windows « Élodie Test » : installer, ouvrir par le raccourci | tout fonctionne, ZIP supprimé ensuite | |
-| W09 | Sauvegarde et restauration | séance A, `SAUVEGARDER.cmd`, séance B, `RESTAURER.cmd` (choisir la sauvegarde) | A présente, B absente ; message « Restauration faite et vérifiée » | |
-| W10 | Désinstallation | `DESINSTALLER.cmd`, puis réinstaller | données retrouvées après réinstallation | |
-| W11 | Tests automatiques Windows | (fait par la CI GitHub : rien à faire) | job « windows-scripts » vert | |
-| W12 | Rapport du poste | `COLLECTER_DIAGNOSTIC.cmd` | fichier `cct-rapport-...txt` dans le dossier personnel (`%USERPROFILE%`, par exemple `C:\Users\<nom>`) | |
-
-Mise à jour (si une nouvelle version existe) : `METTRE_A_JOUR.cmd` de la nouvelle
-version → données conservées, nouvelle version affichée en haut de l'application
-(à côté du nom du moteur) : ____
+| W01 | Installation | double-clic sur le `Setup`, passer SmartScreen (Informations complémentaires → Exécuter quand même), assistant | aucune demande administrateur (pas de fenêtre UAC) ; l'application s'ouvre dans le navigateur ; entrée dans le menu Démarrer | |
+| W02 | Stockfish | Réglages → Moteur Stockfish | soit un Stockfish du PC est trouvé (nom, chemin), soit **Télécharger** l'installe (barre de progression, puis « Stockfish 19 ») ; plus de bandeau « moteur indisponible » | |
+| W03 | Séance complète | une séance (mode B ou C), Go, soumission, révélation, débriefing | comme d'habitude ; l'analyse se fait | |
+| W04 | Instance unique | recliquer 2 ou 3 fois sur le raccourci | un onglet s'ouvre à chaque fois, toujours sur la même application (mêmes séances) | |
+| W05 | Arrêt, puis réouverture | menu Démarrer → Arreter ; vérifier que la page ne répond plus ; rouvrir | arrêt en quelques secondes ; réouverture avec les données | |
+| W06 | Redémarrage du PC | redémarrer Windows, rouvrir par le raccourci | tout est là ; Stockfish n'est pas retéléchargé | |
+| W07 | Local uniquement | depuis un téléphone sur le même Wi-Fi : `http://<IP-du-PC>:8765` | page inaccessible ; aucune alerte du pare-feu Windows à l'installation | |
+| W08 | Compte avec accent ou espace | session Windows « Élodie Test » : installer, ouvrir | tout fonctionne | |
+| W09 | Mise à jour | application ouverte, lancer le `Setup` d'une version plus récente (ou le même) | l'application est arrêtée puis remplacée ; séances et Stockfish conservés ; nouvelle version affichée | |
+| W10 | Désinstallation | Paramètres → Applications → Désinstaller, puis réinstaller | programme supprimé ; après réinstallation, les données sont retrouvées | |
+| W11 | Tests automatiques Windows | rien à faire (CI GitHub) | jobs « scripts Windows » et « installateur Windows natif » verts | |
+| W12 | Passage depuis la version Docker (si vous l'aviez) | suivre « Vous aviez la version Docker » de `README_WINDOWS.md` | anciennes séances présentes dans l'Historique | |
 
 ## Transmettre les résultats (GitHub, sans Git ni jeton)
 
-1. Sur https://github.com/s-geffroy/CCT, sélecteur de branche → taper
-   `validation-windows` → « Create branch » (la première fois seulement).
-2. Sur cette branche : **Add file → Create new file**, nom
-   `validation/AAAA-MM-JJ/resultats.md`, coller cette fiche remplie,
+1. Sur https://github.com/s-geffroy/CCT, ouvrez le sélecteur de branche, tapez
+   `validation-windows`, puis « Create branch » (la première fois seulement).
+2. Sur cette branche : **Add file → Create new file**. Nommez le fichier
+   `validation/AAAA-MM-JJ/resultats.md`, collez-y cette fiche remplie, puis choisissez
    « Commit directly to the validation-windows branch ».
-3. Ouvrir le dossier `validation/AAAA-MM-JJ/` → **Add file → Upload files** :
-   le `cct-rapport-....txt` de votre dossier personnel (`%USERPROFILE%`) et vos captures d'écran.
-4. Dire dans la conversation avec Claude : « rapport déposé, dossier
+3. Ouvrez le dossier `validation/AAAA-MM-JJ/`, puis **Add file → Upload files** :
+   déposez le journal `%LOCALAPPDATA%\Chess Calculation Trainer\data\logs\cct.log`
+   et vos captures d'écran.
+4. Dites dans la conversation avec Claude : « rapport déposé, dossier
    validation/AAAA-MM-JJ ».
 
-Ne rien déposer sur `main`. Le rapport ne contient ni secret ni nom de compte
-(masqués) ; vérifiez quand même vos captures.
+Ne déposez rien sur `main`. Le journal ne contient ni secret ni contenu de séance.
+Il contient en revanche des chemins de fichiers, donc votre nom de compte Windows :
+relisez-le et masquez ce nom si vous le souhaitez. Vérifiez aussi vos captures.

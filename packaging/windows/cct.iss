@@ -3,7 +3,7 @@
 ;   ISCC /DAppVersion=v0.2.0 /DFileVersion=0.2.0.0 /DPayload=<payload> cct.iss
 ;
 ; Programme : %LOCALAPPDATA%\Programs\ChessCalculationTrainer (remplace a chaque mise a jour)
-; Donnees   : %LOCALAPPDATA%\ChessCalculationTrainer\data (jamais supprimees par
+; Donnees   : %LOCALAPPDATA%\Chess Calculation Trainer\data (jamais supprimees par
 ;             l'installateur ni par la desinstallation)
 
 #ifndef AppVersion
@@ -58,13 +58,18 @@ Type: filesandordirs; Name: "{app}\python"
 Type: filesandordirs; Name: "{app}\site-packages"
 Type: filesandordirs; Name: "{app}\backend"
 
+[Dirs]
+; Cible du raccourci "Dossier des donnees". Distinct de %LOCALAPPDATA%\ChessCalculationTrainer
+; (paquet Docker v0.1.x), que son desinstalleur efface en ne gardant que backups\.
+Name: "{localappdata}\Chess Calculation Trainer\data"; Flags: uninsneveruninstall
+
 [Files]
 Source: "{#Payload}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#AppName}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m app.desktop"; WorkingDir: "{app}"; Comment: "Ouvrir l'application dans le navigateur"
 Name: "{autoprograms}\{#AppName}\Arreter {#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m app.desktop --stop"; WorkingDir: "{app}"
-Name: "{autoprograms}\{#AppName}\Dossier des donnees"; Filename: "{localappdata}\ChessCalculationTrainer\data"
+Name: "{autoprograms}\{#AppName}\Dossier des donnees"; Filename: "{localappdata}\Chess Calculation Trainer\data"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m app.desktop"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]

@@ -21,7 +21,7 @@ BACKEND_ROOT = Path(app_package.__file__).resolve().parent.parent
 
 def test_data_dir_follows_the_platform():
     win = desktop.default_data_dir({"LOCALAPPDATA": r"C:\Users\a\AppData\Local"}, windows=True)
-    assert win == Path(r"C:\Users\a\AppData\Local") / "ChessCalculationTrainer" / "data"
+    assert win == Path(r"C:\Users\a\AppData\Local") / "Chess Calculation Trainer" / "data"
     assert desktop.default_data_dir({"HOME": "/home/a"}, windows=False) == Path("/home/a/.local/share/chess-calculation-trainer")
     assert desktop.default_data_dir({"APP_DATA_DIR": "/x", "LOCALAPPDATA": "C:"}, windows=True) == Path("/x")
 
@@ -110,21 +110,28 @@ def test_single_instance_lifecycle(tmp_path):
 
 
 def test_docker_backup_is_offered_to_the_first_native_start(tmp_path, settings):
-    """Passage du paquet Docker (v0.1.x) a l'installateur natif : meme racine
-    %LOCALAPPDATA%\\ChessCalculationTrainer, sauvegardes dans backups\\."""
+    """Passage du paquet Docker (v0.1.x) a l'installateur natif : ses sauvegardes sont
+    dans %LOCALAPPDATA%\\ChessCalculationTrainer\\backups ; les donnees natives vivent
+    AILLEURS (le desinstalleur Docker efface sa racine, sauf backups\\)."""
     from app import backup
 
-    root = tmp_path / "ChessCalculationTrainer"
+    local = tmp_path / "Local"
+    backups = desktop.docker_backups_dir({"LOCALAPPDATA": str(local)})
+    assert backups == local / "ChessCalculationTrainer" / "backups"
+    assert desktop.docker_backups_dir({}) is None
+    data = desktop.default_data_dir({"LOCALAPPDATA": str(local)}, windows=True)
+    assert not data.is_relative_to(local / "ChessCalculationTrainer")
+
     old = replace(settings, data_dir=tmp_path / "docker-data")
     with TestClient(create_app(old)) as c:  # une base Docker avec une position
         c.post("/api/v1/positions", json={"source": "fen", "fen": "8/8/8/8/8/4k3/8/4K2R w K - 0 1"})
     saved = backup.create(old.data_dir)
-    (root / "backups").mkdir(parents=True)
+    backups.mkdir(parents=True)
     for name in ("cct-20261001-120000.sqlite", "cct-20261027-090000.sqlite"):
-        (root / "backups" / name).write_bytes(Path(saved["path"]).read_bytes())
+        (backups / name).write_bytes(Path(saved["path"]).read_bytes())
 
-    data = root / "data"
-    assert desktop.import_docker_backup(data).name == "cct-20261027-090000.sqlite"  # la plus recente
+    assert desktop.import_docker_backup(data, None) is None  # hors Windows : rien a reprendre
+    assert desktop.import_docker_backup(data, backups).name == "cct-20261027-090000.sqlite"  # la plus recente
     with TestClient(create_app(replace(settings, data_dir=data))) as c:
         assert len(c.get("/api/v1/positions").json()["items"]) == 1
-    assert desktop.import_docker_backup(data) is None  # base presente : jamais ecrasee
+    assert desktop.import_docker_backup(data, backups) is None  # base presente : jamais ecrasee
