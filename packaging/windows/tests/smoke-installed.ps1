@@ -10,7 +10,9 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'native.ps1')
 
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\ChessCalculationTrainer'
-$dataDir = Join-Path $env:LOCALAPPDATA 'ChessCalculationTrainer\data'
+$dataDir = Join-Path $env:LOCALAPPDATA 'Chess Calculation Trainer\data'
+# Racine de l'ancien paquet Docker v0.1.x : ses sauvegardes sont reprises au premier lancement.
+$dockerBackups = Join-Path $env:LOCALAPPDATA 'ChessCalculationTrainer\backups'
 $python = Join-Path $installDir 'python\python.exe'
 $pythonw = Join-Path $installDir 'python\pythonw.exe'
 
@@ -53,6 +55,18 @@ try {
     Step 'Installation silencieuse'
     Install-App $Setup
 
+    Step 'Sauvegarde laissee par l ancien paquet Docker (reprise attendue)'
+    # Base vierge mais valide, creee par l'application installee elle-meme.
+    $seed = Join-Path $env:TEMP 'cct-seed'
+    $script = Join-Path $env:TEMP 'cct-seed.py'
+    Set-Content -LiteralPath $script -Encoding ASCII -Value @(
+        'import sys', 'from pathlib import Path', 'from app.persistence.db import Database',
+        'd = Path(sys.argv[1]); d.mkdir(parents=True, exist_ok=True)', 'Database(d / "app.sqlite").migrate()')
+    & $python $script $seed
+    if ($LASTEXITCODE -ne 0) { throw 'Creation de la base de reprise impossible' }
+    New-Item -ItemType Directory -Force -Path $dockerBackups | Out-Null
+    Copy-Item -LiteralPath (Join-Path $seed 'app.sqlite') -Destination (Join-Path $dockerBackups 'cct-20261001-120000.sqlite')
+
     Step 'Demarrage (pythonw, comme le raccourci)'
     $info = Start-App
     $script:base = 'http://127.0.0.1:' + $info.port
@@ -63,6 +77,11 @@ try {
     Write-Host ('   ' + ($version | ConvertTo-Json -Compress))
     $meta = Invoke-Api GET '/api/v1/meta'
     Write-Host ('   version ' + $meta.app_version + ', python-chess ' + $meta.python_chess_version)
+
+    $log = Get-Content -LiteralPath (Join-Path $dataDir 'logs\cct.log') -Raw
+    if ($log -notmatch 'ancienne version Docker reprises' -or $log -notmatch 'base restauree depuis une sauvegarde') {
+        throw 'Sauvegarde du paquet Docker non reprise au premier lancement'
+    }
 
     Step 'Moteur : existant ou telechargement de la release officielle'
     $engine = Invoke-Api GET '/api/v1/engine'

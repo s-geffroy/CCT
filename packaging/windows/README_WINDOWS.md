@@ -1,99 +1,101 @@
-# Chess Calculation Trainer — installation sous Windows
+# Chess Calculation Trainer sous Windows
 
-Application locale d'entraînement au calcul des variantes. Elle tourne dans
-Docker Desktop et s'ouvre dans votre navigateur, à l'adresse
-`http://127.0.0.1:8765`, sur votre PC uniquement : rien n'est accessible depuis
-le réseau.
+Application d'entraînement au calcul des variantes, qui tourne **sur votre PC**,
+dans votre navigateur. Rien n'est envoyé sur Internet ; seul le téléchargement
+de Stockfish (une fois, si nécessaire) passe par le réseau.
 
-## Ce qu'il faut
+**Il ne faut ni Docker, ni WSL, ni droits administrateur.**
 
-- Windows 11 64 bits (version 23H2 ou plus récente), processeur Intel ou AMD.
-- 4 Go de mémoire au minimum (le minimum de Docker Desktop), 8 Go recommandés ; 5 Go
-  d'espace libre. Sous 8 Go, l'installation passe en configuration allégée : Stockfish
-  calcule plus lentement, mais il calcule pendant que vous réfléchissez.
-- **Docker Desktop**, avec WSL 2 et les conteneurs Linux (choix par défaut).
-  S'il manque, `INSTALLER.cmd` **propose de l'installer** pour vous (installateur
-  officiel de Docker via `winget`), comme WSL 2 (`wsl --install`), toujours avec
-  votre accord et la fenêtre d'autorisation de Windows ; si vous refusez, il
-  affiche les gestes à faire. Il démarre Docker Desktop s'il est arrêté et propose
-  de passer en conteneurs Linux si besoin. Page officielle :
-  https://docs.docker.com/desktop/setup/install/windows-install/
-  Docker Desktop a ses propres conditions de licence : c'est **vous** qui les lisez
-  et les acceptez au premier démarrage (le script ne le fait jamais à votre place).
-  Après l'installation de WSL, Windows doit redémarrer : relancez ensuite
-  `INSTALLER.cmd`, il reprend où il en était.
+## Configuration
 
-Aucun autre logiciel n'est nécessaire (ni Python, ni Node, ni Git).
+- Windows 10 (1809 ou plus récent) ou Windows 11, 64 bits ;
+- 4 Go de mémoire au minimum, 300 Mo de disque environ (Stockfish compris) ;
+- un navigateur récent (Edge, Chrome, Firefox).
 
 ## Installer
 
-1. Téléchargez depuis la page Releases du projet le fichier
-   `ChessCalculationTrainer-Windows-vX.Y.Z.zip` et, à côté, son `.sha256`.
-2. (Recommandé) Vérifiez l'empreinte dans PowerShell :
-   ```powershell
-   Get-FileHash -Algorithm SHA256 .\ChessCalculationTrainer-Windows-vX.Y.Z.zip
-   Get-Content .\ChessCalculationTrainer-Windows-vX.Y.Z.zip.sha256
-   ```
-   Les 64 caractères doivent être identiques. Sinon, **ne lancez rien**.
-3. Clic droit sur le ZIP → **Extraire tout**. Ne lancez rien depuis l'intérieur
-   du ZIP.
-4. Démarrez Docker Desktop et attendez qu'il soit prêt.
-5. Double-cliquez **`INSTALLER.cmd`** dans le dossier extrait.
+1. Dans la page de la version sur GitHub (*Releases*), téléchargez
+   `ChessCalculationTrainer-Setup-vX.Y.Z.exe`.
+2. Double-cliquez dessus. L'installateur n'est pas encore signé : Windows
+   (SmartScreen) affiche « Windows a protégé votre ordinateur ». Cliquez sur
+   **Informations complémentaires**, puis **Exécuter quand même**.
+3. Suivez l'assistant (licence GPL, raccourci Bureau en option). À la fin,
+   l'application s'ouvre dans le navigateur.
 
-L'installation copie l'application dans `%LOCALAPPDATA%\ChessCalculationTrainer`,
-télécharge l'image (quelques minutes la première fois), démarre, vérifie que
-tout répond, crée le raccourci **Chess Calculation Trainer** sur le Bureau et
-ouvre le navigateur. Le dossier extrait peut ensuite être supprimé.
+Facultatif : l'empreinte du fichier est publiée à côté (`.sha256`). Pour la
+comparer, dans PowerShell :
+`Get-FileHash .\ChessCalculationTrainer-Setup-vX.Y.Z.exe -Algorithm SHA256`.
 
-Windows peut afficher un avertissement SmartScreen pour un fichier `.cmd`
-téléchargé : vérifiez que l'archive vient bien de la page Releases du projet et
-que l'empreinte concorde. Ne désactivez jamais SmartScreen ni l'antivirus.
+## Stockfish
 
-Les `.cmd` lancent PowerShell avec `-ExecutionPolicy Bypass` **pour leur propre
-script seulement** : la politique de votre poste n'est pas modifiée. Sur un poste
-d'entreprise verrouillé, ce lancement peut être interdit : voyez votre service
-informatique.
+Au premier lancement, l'application cherche un Stockfish déjà présent sur le PC
+(Program Files, Arena, ChessBase, `PATH`). Il doit s'agir de Stockfish 16 ou d'une
+version plus récente.
+
+S'il n'y en a pas, ouvrez **Réglages → Moteur Stockfish → Télécharger Stockfish**.
+L'application télécharge alors la version officielle Stockfish 19 (environ 80 Mo)
+depuis GitHub. Elle vérifie son empreinte avant de l'installer dans le dossier des
+données.
+
+Pour utiliser un autre Stockfish, indiquez son chemin dans le champ « Chemin d'un
+Stockfish existant » du même écran, puis enregistrez.
+
+Sans moteur, les séances de calcul (B et C) restent possibles ; l'analyse les
+rattrape dès qu'un moteur est disponible.
 
 ## Au quotidien
 
-| Action | Comment |
+| Pour… | Faire |
 |---|---|
-| Ouvrir | raccourci du Bureau (ou `OUVRIR.cmd` dans `%LOCALAPPDATA%\ChessCalculationTrainer`) |
-| Arrêter | `ARRETER.cmd` : l'application s'arrête, vos données restent |
-| Sauvegarder | `SAUVEGARDER.cmd` : copie vérifiée dans `...\ChessCalculationTrainer\backups` |
-| Restaurer | `RESTAURER.cmd` : choisir une sauvegarde ; la base actuelle est d'abord copiée |
-| Mettre à jour | extraire le ZIP de la **nouvelle** version, double-cliquer son `METTRE_A_JOUR.cmd` |
-| Désinstaller | `DESINSTALLER.cmd` : les données sont **conservées** |
-| Signaler un problème | `COLLECTER_DIAGNOSTIC.cmd` : rapport texte dans votre dossier personnel (`%USERPROFILE%`) |
+| Ouvrir | menu Démarrer → **Chess Calculation Trainer** (ou le raccourci Bureau). Un second clic rouvre simplement l'onglet. |
+| Arrêter | menu Démarrer → Chess Calculation Trainer → **Arreter Chess Calculation Trainer**. Fermer l'onglet ne suffit pas : l'application continue en arrière-plan, sans fenêtre. |
+| Voir les données | menu Démarrer → Chess Calculation Trainer → **Dossier des donnees** |
+| Mettre à jour | lancer le `Setup` de la nouvelle version, même si l'application est ouverte : elle est arrêtée proprement, puis remplacée. Vos données sont conservées. |
+| Désinstaller | Paramètres Windows → Applications → **Chess Calculation Trainer** → Désinstaller. Vos données sont conservées. |
 
-Vos séances et positions vivent dans le volume Docker
-`chess-calculation-trainer-data`. Arrêter, réinstaller, mettre à jour ou
-désinstaller ne l'efface pas. Pour tout effacer (définitif), en PowerShell :
-`& "$env:LOCALAPPDATA\ChessCalculationTrainer\scripts\windows\uninstall.ps1" -PurgeData`
-(double confirmation demandée).
+L'application écoute seulement sur `127.0.0.1` (votre PC). Elle prend le port 8765,
+ou un port voisin s'il est occupé.
 
-## Mise à jour
+## Où sont les fichiers
 
-`INSTALLER.cmd` refuse d'installer une autre version par-dessus l'existante.
-Utilisez `METTRE_A_JOUR.cmd` de la nouvelle version : il sauvegarde vos données
-(sauvegarde vérifiée), passe à la nouvelle image, laisse l'application migrer sa
-base, puis vérifie qu'elle répond. Si la nouvelle version ne démarre pas, il
-**revient automatiquement** à l'ancienne version et à vos données d'avant la mise
-à jour.
-
-## Problèmes fréquents
-
-| Message | Que faire |
+| Quoi | Où |
 |---|---|
-| Docker Desktop absent | l'installer depuis le lien officiel, le démarrer, relancer `INSTALLER.cmd` |
-| Docker ne répond pas | démarrer Docker Desktop, attendre « Engine running », relancer |
-| Conteneurs Windows | menu de Docker Desktop → *Switch to Linux containers* |
-| Port 8765 déjà utilisé | changer `HOST_PORT=8766` dans `%LOCALAPPDATA%\ChessCalculationTrainer\.env`, relancer `INSTALLER.cmd` |
-| Image refusée (*denied*) | l'image n'est pas encore publique : signalez-le au projet |
-| Moteur indisponible | l'entraînement reste possible ; envoyez le rapport de diagnostic |
+| Programme (remplacé à chaque mise à jour) | `%LOCALAPPDATA%\Programs\ChessCalculationTrainer` |
+| **Vos données** : base, Stockfish téléchargé, journal | `%LOCALAPPDATA%\Chess Calculation Trainer\data` |
+| Journal (à joindre en cas de problème) | `...\data\logs\cct.log` |
 
-## Licence
+Une copie de la base est faite automatiquement avant chaque changement de format
+(dans `...\data\backups`).
 
-Logiciel libre sous GPL-3.0-or-later (`LICENSE`). Il embarque Stockfish 19
-(GPL-3.0) et d'autres composants listés dans `THIRD_PARTY_NOTICES.md`, avec
-l'adresse de leurs sources.
+**Sauvegarder vous-même** : arrêtez l'application, puis copiez le dossier `data`
+ailleurs.
+
+**Restaurer** une base `.sqlite` : arrêtez l'application, puis copiez le fichier sous
+le nom `...\data\restore\incoming.sqlite` et rouvrez l'application. Elle le vérifie
+avant de le prendre, et l'ancienne base est gardée à côté.
+
+## Vous aviez la version Docker (v0.1.x)
+
+Faites ces étapes **dans cet ordre**. L'ancien désinstalleur supprime un raccourci
+Bureau du même nom : il doit passer avant le nouvel installateur.
+
+1. Dans `%LOCALAPPDATA%\ChessCalculationTrainer` (dossier de l'ancienne version),
+   double-cliquez sur **`SAUVEGARDER.cmd`**. Une copie vérifiée est écrite dans
+   `...\ChessCalculationTrainer\backups`.
+2. Dans le même dossier, double-cliquez sur **`DESINSTALLER.cmd`** et gardez les
+   données (réponse par défaut).
+3. Installez la nouvelle version (ci-dessus). Au premier lancement, la dernière
+   sauvegarde Docker est reprise automatiquement et vérifiée. Le journal l'indique :
+   « donnees de l'ancienne version Docker reprises ».
+
+Docker Desktop n'est plus nécessaire. Vous pouvez le désinstaller s'il ne vous sert
+à rien d'autre.
+
+## En cas de problème
+
+| Symptôme | Que faire |
+|---|---|
+| Rien ne s'ouvre après un clic | attendre 10 s (premier démarrage), puis recliquer. Sinon, joindre `...\data\logs\cct.log`. |
+| « Moteur indisponible » | Réglages → Moteur Stockfish : la raison est affichée ; télécharger, ou indiquer un chemin. |
+| Téléchargement de Stockfish refusé | réseau filtré ou empreinte inattendue : rien n'a été installé. Réessayer plus tard, ou indiquer un Stockfish déjà présent. |
+| L'installateur dit que l'application ne s'est pas arrêtée | menu Démarrer → Arreter, puis relancer l'installateur. |

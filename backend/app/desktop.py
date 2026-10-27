@@ -30,7 +30,10 @@ import webbrowser
 from dataclasses import replace
 from pathlib import Path
 
-APP_DIR_NAME = "ChessCalculationTrainer"
+# Donnees : dossier DISTINCT de celui du paquet Docker v0.1.x
+# (%LOCALAPPDATA%\ChessCalculationTrainer), dont le desinstalleur efface tout sauf backups\.
+APP_DIR_NAME = "Chess Calculation Trainer"
+DOCKER_DIR_NAME = "ChessCalculationTrainer"
 PREFERRED_PORT = 8765
 PORT_ATTEMPTS = 10
 TOKEN_HEADER = "X-CCT-Token"
@@ -175,15 +178,22 @@ def _set_version() -> None:
         os.environ["APP_VERSION"] = version_file.read_text(encoding="utf-8").strip()
 
 
-def import_docker_backup(data_dir: Path) -> Path | None:
+def docker_backups_dir(environ: dict[str, str] | None = None) -> Path | None:
+    """Sauvegardes du paquet Docker v0.1.x (SAUVEGARDER.cmd, mises a jour), sous Windows."""
+    environ = os.environ if environ is None else environ
+    base = environ.get("LOCALAPPDATA")
+    return Path(base) / DOCKER_DIR_NAME / "backups" if base else None
+
+
+def import_docker_backup(data_dir: Path, backups_dir: Path | None) -> Path | None:
     """Premier lancement apres le paquet Docker (v0.1.x) : sa derniere sauvegarde
-    (<racine>/backups/cct-*.sqlite, faite par SAUVEGARDER.cmd ou la mise a jour) est
+    (cct-*.sqlite, faite par SAUVEGARDER.cmd ou une mise a jour) est
     deposee pour la restauration du demarrage, qui la verifie avant de la prendre."""
     from . import backup
 
-    if (data_dir / "app.sqlite").exists():
+    if backups_dir is None or (data_dir / "app.sqlite").exists():
         return None
-    found = sorted((data_dir.parent / "backups").glob("cct-*.sqlite"))
+    found = sorted(backups_dir.glob("cct-*.sqlite")) if backups_dir.is_dir() else []
     if not found:
         return None
     incoming = data_dir / backup.RESTORE_DIR / backup.INCOMING
@@ -231,7 +241,7 @@ def serve(data_dir: Path, port: int, open_browser: bool) -> int:
         bound = sock.getsockname()[1]
         if bound != port:
             log.warning("port %d occupe : port %d utilise", port, bound)
-        migrated = import_docker_backup(data_dir)
+        migrated = import_docker_backup(data_dir, docker_backups_dir())
         if migrated is not None:
             log.info("donnees de l'ancienne version Docker reprises : %s", migrated.name)
         token = secrets.token_urlsafe(32)

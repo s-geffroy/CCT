@@ -1,7 +1,7 @@
 # Stack du VPS : developpement et tests uniquement (docs/decisions.md).
 # L'application ne sert personne ici : aucun port publie, aucun label Traefik,
-# 'exposure: none' dans app.yaml. Le compose de production Windows vit dans
-# packaging/windows/compose.yaml.
+# 'exposure: none' dans app.yaml. Sous Windows, l'application s'installe sans Docker
+# (packaging/windows/, installateur natif).
 services:
   app:
     build:

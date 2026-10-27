@@ -2,8 +2,8 @@ name: Container build and Windows release
 
 # PR, push sur main, lancement manuel : tests seulement, rien n'est publie.
 # Tag vX.Y.Z : tests, puis image GHCR par digest et release en BROUILLON
-# (publication manuelle apres passage du paquet en Public, pull anonyme et
-# validation Windows, cf. docs/release.md).
+# avec l'installateur Windows natif (publication manuelle apres validation sur
+# un vrai PC Windows, cf. docs/release.md).
 on:
   push:
     branches: [main]
@@ -89,13 +89,13 @@ jobs:
         env:
           VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.0.0-ci.{0}', github.run_number) }}
         run: |
-          .\packaging\windows-native\build.ps1 -Version $env:VERSION -FrontendDist frontend\dist -OutDir dist-native
+          .\packaging\windows\build.ps1 -Version $env:VERSION -FrontendDist frontend\dist -OutDir dist-native
           exit $LASTEXITCODE
       - name: Installation, demarrage, Stockfish, analyse, mise a jour, desinstallation
         shell: powershell
         run: |
           $setup = (Get-ChildItem dist-native\ChessCalculationTrainer-Setup-*.exe | Select-Object -First 1).FullName
-          .\packaging\windows-native\tests\smoke-installed.ps1 -Setup $setup
+          .\packaging\windows\tests\smoke-installed.ps1 -Setup $setup
           exit $LASTEXITCODE
       - name: Journal de l'application (en cas d'echec)
         if: failure()
@@ -103,7 +103,7 @@ jobs:
         with:
           name: windows-native-logs
           path: |
-            ~\AppData\Local\ChessCalculationTrainer\data\logs
+            ~\AppData\Local\Chess Calculation Trainer\data\logs
             ~\AppData\Local\Temp\cct-setup.log
           retention-days: 7
       - name: Installateur (pour la release)
@@ -172,12 +172,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Bundle Windows (ZIP + SHA256)
-        env:
-          VERSION: ${{ github.ref_name }}
-          IMAGE: ${{ needs.publish.outputs.image }}
-          DIGEST: ${{ needs.publish.outputs.digest }}
-        run: python3 scripts/ci/make_windows_bundle.py "$VERSION" "$IMAGE" "$DIGEST" dist
       - name: Installateur natif (setup.exe + SHA256)
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -193,13 +187,13 @@ jobs:
         run: |
           set -euo pipefail
           cat > notes.md <<EOF
-          Image : \`${IMAGE}@${DIGEST}\`
+          Image Docker (developpement, serveur) : \`${IMAGE}@${DIGEST}\`
 
           **Windows : \`ChessCalculationTrainer-Setup-${VERSION}.exe\`** (sans Docker, sans droits
           administrateur ; empreinte dans le fichier \`.sha256\`). Installateur non signe :
           SmartScreen demande "Informations complementaires" puis "Executer quand meme".
 
-          **Brouillon.** Avant publication : paquet GHCR en Public, \`docker pull\` anonyme
-          du digest ci-dessus, validation sur un PC Windows 11 (VALIDATION_WINDOWS.md).
+          **Brouillon.** Avant publication : installation et fiche W01-W12 sur un vrai PC
+          Windows 11 (packaging/windows/VALIDATION_WINDOWS.md, docs/release.md).
           EOF
           gh release create "$VERSION" dist/* --draft --verify-tag --title "$VERSION" --notes-file notes.md --generate-notes
